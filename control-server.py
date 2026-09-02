@@ -9,25 +9,32 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 SHINTO_BIN = sys.argv[2] if len(sys.argv) > 2 else "shinto"
 PORT = int(os.environ.get("SHINTO_PORT", "18764"))
 PORT_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "shinto.port")
+PENDING: dict[str, str] = {}
 
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_args) -> None:
         return
 
+    def _loopback(self) -> bool:
+        return self.client_address[0] in ("127.0.0.1", "::1")
+
     def _from_extension(self) -> bool:
         origin = self.headers.get("Origin", "")
         if origin.startswith("chrome-extension://"):
             return True
+        if origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
+            return True
         # Extension service-worker fetch to loopback sometimes omits Origin.
-        return origin == "" and self.client_address[0] in ("127.0.0.1", "::1")
+        return origin == "" and self._loopback()
 
     def do_POST(self) -> None:
         path = unquote(urlparse(self.path).path)
@@ -36,19 +43,28 @@ class Handler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(min(length, 8192)) if length else b""
-        url = ""
+        body: dict = {}
         if raw:
             try:
-                body = json.loads(raw.decode())
+                parsed = json.loads(raw.decode())
             except (json.JSONDecodeError, UnicodeDecodeError):
-                body = {}
-            if isinstance(body, dict):
-                candidate = body.get("url")
-                if isinstance(candidate, str) and candidate.startswith(("http://", "https://")):
-                    url = candidate[:2048]
-        cmd = [SHINTO_BIN]
-        if url:
-            cmd.extend(["--edit", url])
+                parsed = {}
+            if isinstance(parsed, dict):
+                body = parsed
+        def http_url(value: object) -> str:
+            if isinstance(value, str) and value.startswith(("http://", "https://")):
+                return value[:2048]
+            return ""
+        app = http_url(body.get("app"))
+        edit = http_url(body.get("url"))
+        if app:
+            cmd = [SHINTO_BIN, app]
+        elif edit:
+            token = str(time.time_ns())
+            PENDING[token] = edit
+            cmd = [SHINTO_BIN, "--edit", token]
+        else:
+            cmd = [SHINTO_BIN]
         subprocess.Popen(
             cmd,
             start_new_session=True,
@@ -62,9 +78,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        path = unquote(urlparse(self.path).path)
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
         if path == "/open":
             self.send_error(405)
+            return
+        if path == "/pending-edit":
+            if not self._loopback():
+                self.send_error(403)
+                return
+            token = parse_qs(parsed.query).get("n", [""])[0]
+            url = PENDING.pop(token, "") if token else ""
+            data = json.dumps({"url": url}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
             return
         if path in ("", "/"):
             path = "/newtab.html"

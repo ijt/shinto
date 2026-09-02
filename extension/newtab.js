@@ -17,7 +17,12 @@ const input = document.getElementById("q");
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const url = toUrl(input.value);
-  if (url) location.href = url;
+  if (!url) return;
+  fetch("/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ app: url }),
+  }).then(() => window.close());
 });
 
 document.addEventListener("mousedown", () => input.focus());
@@ -43,9 +48,6 @@ window.addEventListener(
   true
 );
 
-const prefill = new URLSearchParams(location.search).get("u");
-if (prefill) input.value = prefill;
-input.focus();
 function caretAtEnd() {
   const n = input.value.length;
   try {
@@ -54,5 +56,19 @@ function caretAtEnd() {
     /* ignore */
   }
 }
+
+const token = new URLSearchParams(location.search).get("n") || "";
+fetch("/pending-edit?n=" + encodeURIComponent(token))
+  .then((r) => r.json())
+  .then((data) => {
+    if (data && data.url) {
+      input.value = data.url;
+      input.focus();
+      caretAtEnd();
+      requestAnimationFrame(caretAtEnd);
+    }
+  })
+  .catch(() => {});
+
+input.focus();
 caretAtEnd();
-requestAnimationFrame(caretAtEnd);

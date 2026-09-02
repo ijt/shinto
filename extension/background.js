@@ -10,11 +10,8 @@ async function toOwnWindow(tab) {
   if (tab?.id == null || moving.has(tab.id)) return;
   moving.add(tab.id);
   try {
-    await chrome.windows.create({
-      tabId: tab.id,
-      type: "popup",
-      focused: true,
-    });
+    if (tab.url) await openUrl(tab.url);
+    await chrome.tabs.remove(tab.id);
   } catch (err) {
     console.warn("shinto: move tab failed", err);
   } finally {
@@ -124,11 +121,21 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 });
 
 async function openUrl(url) {
-  await chrome.windows.create({
-    url: url || LOCAL_NEWTAB,
-    type: "popup",
-    focused: true,
-  });
+  const go = gateUrl(url);
+  if (!go) {
+    await openNewPage();
+    return;
+  }
+  try {
+    await fetch("http://127.0.0.1:18764/open", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app: go }),
+    });
+  } catch (err) {
+    console.warn("shinto: open-app", err);
+  }
 }
 
 const TYPED_MAX = 300;

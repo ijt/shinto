@@ -150,16 +150,10 @@ ensure_daemon() {
 }
 
 open_gate() {
-  local url=${1:-}
-  local app="${LOCAL_NEWTAB}?n=$(date +%s%N)"
-  if [[ -n $url ]]; then
-    local enc
-    enc=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$url")
-    app="${app}&u=${enc}"
-  fi
-  # Serve newtab over loopback so --app stays in-scope and Chromium
-  # does not draw the custom tab bar (title + pencil).
-  run_chromium --app="$app" >/dev/null 2>&1 || true
+  local n=${1:-$(date +%s%N)}
+  # Loopback --app with no foreign URL in the query. Chromium shows the
+  # Shinto+pencil bar when an --app window is out of scope.
+  run_chromium --app="${LOCAL_NEWTAB}?n=${n}" >/dev/null 2>&1 || true
 }
 
 open_page() {
@@ -174,7 +168,7 @@ open_page() {
 
 open_edit() {
   ensure_daemon
-  open_gate "${1:-}"
+  open_gate "${1:-$(date +%s%N)}"
 }
 
 run_daemon() {

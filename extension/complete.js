@@ -87,7 +87,9 @@ function attachGateComplete(input, form) {
     hideList();
     if (!url) return;
     chrome.runtime.sendMessage({ type: "typed", q, url });
-    location.href = url;
+    chrome.runtime.sendMessage({ type: "open", url }, () => {
+      window.close();
+    });
   }
 
   function move(delta) {
