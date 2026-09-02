@@ -41,7 +41,7 @@ const GATE_CSS = `
 .gate-row {
   display: flex;
   align-items: center;
-  gap: 0.55em;
+  gap: 0.4em;
   width: calc(100% - 16vw);
   margin: 0 8vw 10vh;
   border-bottom: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
@@ -136,7 +136,6 @@ function boot() {
       <div id="veil">
         <form class="gate" autocomplete="off" spellcheck="false">
           <div class="gate-row">
-            <input class="gate-input" type="text" spellcheck="false" />
             <svg class="gate-mark" viewBox="0 0 128 128" aria-hidden="true">
               <g fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 34h92" />
@@ -145,6 +144,7 @@ function boot() {
                 <path d="M88 34v62" />
               </g>
             </svg>
+            <input class="gate-input" type="text" spellcheck="false" />
           </div>
         </form>
       </div>

@@ -5,7 +5,7 @@
 .gate-row {
   display: flex;
   align-items: center;
-  gap: 0.55em;
+  gap: 0.4em;
   width: calc(100% - 16vw);
   margin: 0 8vw 10vh;
   border-bottom: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
