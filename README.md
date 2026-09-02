@@ -59,5 +59,5 @@ Hyprland groups (these are the tabs):
 
 - Dedicated Chromium profile at `~/.local/share/shinto/profile` — your main Chromium logins are untouched.
 - Overlay omnibox on the new-tab page (`Ctrl+L` on http(s) pages too).
-- Chromium `--app` windows still draw a thin title chip. The page is the point; Hyprland is the rest of the chrome.
-- `Super + Shift + B` remains stock Chromium.
+- Empty `Super + Shift + Return` opens a loopback new-tab page so Chromium does not draw the custom tab bar (title + pencil). Dim torii in the void, address line at the bottom.
+- `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG). `shinto default` points that at Shinto.

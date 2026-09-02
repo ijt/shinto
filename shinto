@@ -13,15 +13,11 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 EXT_DIR="$DATA_HOME/extension"
 PROFILE_DIR="$DATA_HOME/profile"
 NEWTAB_ID="badlilcpkdpfckbkeaejdnpinhejkiao"
-NEWTAB_URL="chrome-extension://${NEWTAB_ID}/newtab.html"
-LAUNCH_URL="chrome-extension://${NEWTAB_ID}/launch.html"
 SPARE_URL="chrome-extension://${NEWTAB_ID}/spare.html"
-SPARE_CLASS="chrome-badlilcpkdpfckbkeaejdnpinhejkiao__spare.html-Default"
-CONTROL_SOCK="${XDG_RUNTIME_DIR:-/tmp}/shinto.sock"
-HOST_SCRIPT="$SCRIPT_DIR/native-host.py"
+LOCAL_PORT="${SHINTO_PORT:-18764}"
+LOCAL_NEWTAB="http://127.0.0.1:${LOCAL_PORT}/newtab.html"
 
 CHROMIUM_BIN="${SHINTO_CHROMIUM:-/usr/lib/chromium/chromium}"
-OMARCHY_EXTS=/usr/share/omarchy/default/chromium/extensions
 COLORS_TOML="${HOME}/.local/state/omarchy/current/theme/colors.toml"
 
 usage() {
@@ -70,27 +66,6 @@ sync_extension() {
   write_theme
 }
 
-install_native_host() {
-  local manifest
-  manifest=$(cat <<EOF
-{
-  "name": "org.shinto.control",
-  "description": "Shinto page-open socket",
-  "path": "$HOST_SCRIPT",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://${NEWTAB_ID}/"
-  ]
-}
-EOF
-)
-  local dir
-  for dir in "$PROFILE_DIR/NativeMessagingHosts" "$HOME/.config/chromium/NativeMessagingHosts"; do
-    mkdir -p "$dir"
-    printf '%s\n' "$manifest" >"$dir/org.shinto.control.json"
-  done
-}
-
 seed_profile() {
   mkdir -p "$PROFILE_DIR/Default"
   [[ -f $PROFILE_DIR/First\ Run ]] || : >"$PROFILE_DIR/First Run"
@@ -106,7 +81,6 @@ seed_profile() {
 }
 EOF
   fi
-  install_native_host
 }
 
 extension_list() {
@@ -162,58 +136,6 @@ daemon_running() {
   singleton_ready
 }
 
-spare_address() {
-  command -v hyprctl >/dev/null || return 0
-  hyprctl clients -j 2>/dev/null | python3 -c "
-import json, sys
-klass = sys.argv[1]
-try:
-    clients = json.load(sys.stdin)
-except Exception:
-    raise SystemExit(0)
-for c in clients:
-    if c.get('class') == klass or c.get('initialClass') == klass:
-        print(c.get('address', ''))
-        break
-    title = c.get('title') or ''
-    initial = c.get('initialTitle') or ''
-    if 'spare.html' in title or 'spare.html' in initial or title == 'Shinto Spare':
-        print(c.get('address', ''))
-        break
-" "$SPARE_CLASS"
-}
-
-ensure_spare() {
-  local addr
-  addr=$(spare_address || true)
-  [[ -n ${addr:-} ]] && return 0
-  run_chromium --app="$SPARE_URL" >/dev/null 2>&1 || true
-}
-
-wait_for_socket() {
-  local i
-  for i in $(seq 1 50); do
-    [[ -S $CONTROL_SOCK ]] && return 0
-    sleep 0.05
-  done
-  return 1
-}
-
-poke() {
-  python3 - "$CONTROL_SOCK" "$1" "${2:-}" <<'PY'
-import json, socket, sys
-sock_path, kind, url = sys.argv[1], sys.argv[2], sys.argv[3]
-msg = {"type": kind}
-if url:
-    msg["url"] = url
-payload = json.dumps(msg).encode()
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.connect(sock_path)
-s.sendall(payload)
-s.close()
-PY
-}
-
 open_page() {
   local target=${1:-}
   if ! daemon_running; then
@@ -225,16 +147,12 @@ open_page() {
       seed_profile
     fi
   fi
-  if [[ -S $CONTROL_SOCK ]] && poke new-page 2>/dev/null && [[ -z $target ]]; then
-    return
-  fi
-  if [[ -S $CONTROL_SOCK && -n $target ]] && poke open "$target" 2>/dev/null; then
-    return
-  fi
   if [[ -n $target ]]; then
     run_chromium --app="$target" >/dev/null 2>&1 || true
   else
-    run_chromium --app="$NEWTAB_URL" >/dev/null 2>&1 || true
+    # Serve newtab over loopback so --app stays in-scope and Chromium
+    # does not draw the custom tab bar (title + pencil).
+    run_chromium --app="${LOCAL_NEWTAB}?n=$(date +%s%N)" >/dev/null 2>&1 || true
   fi
 }
 
@@ -243,8 +161,14 @@ run_daemon() {
   seed_profile
   chromium_env
   chromium_base_args
-  # The spare window *is* the keep-alive. Hyprland parks it on a silent
-  # special workspace so closing every visible page does not quit Chromium.
+  python3 "$SCRIPT_DIR/control-server.py" "$EXT_DIR" &
+  local i
+  for i in $(seq 1 40); do
+    if curl -sf --max-time 0.2 "http://127.0.0.1:${LOCAL_PORT}/newtab.html" >/dev/null; then
+      break
+    fi
+    sleep 0.05
+  done
   exec "$CHROMIUM_BIN" "${CHROMIUM_ARGS[@]}" --app="$SPARE_URL"
 }
 
@@ -367,7 +291,9 @@ After=graphical-session.target
 Type=simple
 ExecStart=$SCRIPT_PATH daemon
 Restart=always
-RestartSec=1
+RestartSec=2
+TimeoutStopSec=8
+KillMode=mixed
 Environment=HOME=%h
 Environment=XDG_RUNTIME_DIR=%t
 PassEnvironment=WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE FONTCONFIG_PATH FONTCONFIG_FILE
@@ -393,9 +319,9 @@ install_hypr() {
 -- Shinto: Super+Shift+Return opens a warm page window.
 -- Super+Shift+B stays Omarchy's default-browser launcher (Chromium unless you change it).
 hl.unbind("SUPER + SHIFT + RETURN")
-o.bind("SUPER + SHIFT + RETURN", "Shinto", "$HOME/.local/bin/shinto")
+o.bind("SUPER + SHIFT + RETURN", "Shinto", { launch = "$HOME/.local/bin/shinto" })
 hl.unbind("SUPER + SHIFT + Y")
-o.bind("SUPER + SHIFT + Y", "YouTube", "$HOME/.local/bin/shinto https://youtube.com/")
+o.bind("SUPER + SHIFT + Y", "YouTube", { launch = "$HOME/.local/bin/shinto https://youtube.com/" })
 EOF
   fi
   if command -v hyprctl >/dev/null; then

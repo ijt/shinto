@@ -20,11 +20,15 @@ form.addEventListener("submit", (event) => {
   if (url) location.href = url;
 });
 
+document.addEventListener("mousedown", () => input.focus());
+
 document.addEventListener("keydown", (event) => {
   if (event.altKey || event.metaKey) return;
   if (event.ctrlKey && event.key.toLowerCase() === "t") {
     event.preventDefault();
-    chrome.runtime.sendMessage({ type: "new-page" });
+    if (typeof chrome !== "undefined" && chrome.runtime) {
+      chrome.runtime.sendMessage({ type: "new-page" });
+    }
     return;
   }
   if (event.ctrlKey && event.key.toLowerCase() === "l") {

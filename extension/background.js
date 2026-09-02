@@ -84,23 +84,6 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-function attachHost() {
-  let port;
-  try {
-    port = chrome.runtime.connectNative("org.shinto.control");
-  } catch {
-    setTimeout(attachHost, 1000);
-    return;
-  }
-  port.onMessage.addListener((msg) => {
-    if (msg?.type === "open") openUrl(msg.url);
-    else if (msg?.type === "new-page") openNewPage();
-  });
-  port.onDisconnect.addListener(() => setTimeout(attachHost, 500));
-}
-
-attachHost();
-
 chrome.commands.onCommand.addListener((command) => {
   if (command === "new-page") openNewPage();
 });

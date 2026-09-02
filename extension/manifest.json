@@ -9,7 +9,7 @@
     "48": "icon.png",
     "128": "icon.png"
   },
-  "permissions": ["tabs", "windows", "commands", "nativeMessaging"],
+  "permissions": ["tabs", "windows", "commands"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
