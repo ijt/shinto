@@ -42,7 +42,8 @@ Browser (inside a Shinto window):
 | Key | Action |
 |-----|--------|
 | `Ctrl + T` | New page (new window) |
-| `Ctrl + L` / `Ctrl + K` | Overlay omnibox |
+| `Ctrl + L` / `Ctrl + K` | Empty address screen |
+| `Escape` | Back to the previous page |
 | `↑` / `↓` / `Tab` | Complete from typed URLs, history, Google |
 | `Ctrl + W` / `Super + Q` | Close this page |
 
@@ -59,6 +60,6 @@ Hyprland groups (these are the tabs):
 ## Notes
 
 - Dedicated Chromium profile at `~/.local/share/shinto/profile` — your main Chromium logins are untouched.
-- Overlay omnibox on the new-tab page (`Ctrl+L` on http(s) pages too).
+- `Ctrl+L` returns to the empty new-tab page. Escape goes back.
 - Empty `Super + Shift + Return` opens a loopback new-tab page so Chromium does not draw the custom tab bar (title + pencil). Hazy Fuji in the void, address line at the bottom.
 - `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG). `shinto default` points that at Shinto.

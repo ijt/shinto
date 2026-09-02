@@ -45,4 +45,12 @@ window.addEventListener(
   true
 );
 
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  if (history.length > 1) {
+    event.preventDefault();
+    history.back();
+  }
+});
+
 input.focus();

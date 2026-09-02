@@ -99,21 +99,18 @@ async function resolveTabId(hint) {
   return undefined;
 }
 
+const LOCAL_NEWTAB = "http://127.0.0.1:18764/newtab.html";
+
 async function focusLocation(tabId) {
   const id = await resolveTabId(tabId);
   if (id == null) return;
   try {
-    await chrome.tabs.sendMessage(id, { type: "focus-location" });
-    return;
-  } catch {
-    /* content script missing; inject and retry */
-  }
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: id },
-      files: ["complete.js", "overlay.js"],
-    });
-    await chrome.tabs.sendMessage(id, { type: "focus-location" });
+    const tab = await chrome.tabs.get(id);
+    const url = tab.url || "";
+    if (url.includes("/newtab.html") && (url.includes("127.0.0.1") || url.includes("localhost"))) {
+      return;
+    }
+    await chrome.tabs.update(id, { url: LOCAL_NEWTAB });
   } catch (err) {
     console.warn("shinto: focus-location", err);
   }
