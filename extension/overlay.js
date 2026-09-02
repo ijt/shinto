@@ -40,7 +40,7 @@ const GATE_CSS = `
 .gate { width: 100%; }
 .gate-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.4em;
   width: calc(100% - 16vw);
   margin: 0 8vw 10vh;
@@ -59,15 +59,15 @@ const GATE_CSS = `
   font: 16px/1.8 var(--font);
   letter-spacing: 0.02em;
   font-weight: 400;
-  padding: 8px 0;
+  padding: 8px 0 2px;
   caret-color: color-mix(in srgb, var(--accent) 70%, var(--fg));
   caret-animation: manual;
 }
 .gate-mark {
   flex: none;
   width: 1.15em;
-  height: 1.15em;
-  margin-bottom: 0.12em;
+  height: 1.05em;
+  display: block;
   color: var(--accent);
   opacity: 0.42;
   pointer-events: none;
@@ -136,7 +136,7 @@ function boot() {
       <div id="veil">
         <form class="gate" autocomplete="off" spellcheck="false">
           <div class="gate-row">
-            <svg class="gate-mark" viewBox="0 0 128 128" aria-hidden="true">
+            <svg class="gate-mark" viewBox="16 32 96 66" aria-hidden="true">
               <g fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 34h92" />
                 <path d="M28 50h72" />
