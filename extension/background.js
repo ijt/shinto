@@ -84,10 +84,36 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
+async function resolveTabId(hint) {
+  if (hint != null) return hint;
+  const queries = [
+    { active: true, lastFocusedWindow: true },
+    { active: true, currentWindow: true },
+    { lastFocusedWindow: true },
+  ];
+  for (const q of queries) {
+    const tabs = await chrome.tabs.query(q);
+    const id = tabs.find((t) => t.id != null)?.id;
+    if (id != null) return id;
+  }
+  return undefined;
+}
+
 async function focusLocation(tabId) {
-  if (tabId == null) return;
+  const id = await resolveTabId(tabId);
+  if (id == null) return;
   try {
-    await chrome.tabs.sendMessage(tabId, { type: "focus-location" }, { frameId: 0 });
+    await chrome.tabs.sendMessage(id, { type: "focus-location" });
+    return;
+  } catch {
+    /* content script missing; inject and retry */
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: id },
+      files: ["overlay.js"],
+    });
+    await chrome.tabs.sendMessage(id, { type: "focus-location" });
   } catch (err) {
     console.warn("shinto: focus-location", err);
   }

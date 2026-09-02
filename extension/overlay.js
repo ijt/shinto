@@ -8,13 +8,13 @@ function isShintoNewtab() {
 }
 
 function isLocationShortcut(event) {
-  if ((!event.ctrlKey && !event.metaKey) || event.altKey) return false;
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.repeat) return false;
   const key = event.key.toLowerCase();
   return event.code === "KeyL" || event.code === "KeyK" || key === "l" || key === "k";
 }
 
 function isNewPageShortcut(event) {
-  if ((!event.ctrlKey && !event.metaKey) || event.altKey) return false;
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.repeat) return false;
   return event.code === "KeyT" || event.key.toLowerCase() === "t";
 }
 
@@ -29,69 +29,97 @@ function toUrl(raw) {
   return "https://duckduckgo.com/?q=" + encodeURIComponent(q);
 }
 
-if (location.protocol === "chrome-extension:" || isShintoNewtab()) {
-  /* Spare / launch / new-tab already own their chrome. */
-} else if (window !== window.top) {
-  window.addEventListener(
-    "keydown",
-    (event) => {
-      if (!isLocationShortcut(event) && !isNewPageShortcut(event)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      chrome.runtime.sendMessage({
-        type: isNewPageShortcut(event) ? "new-page" : "focus-location",
-      });
-    },
-    true
+const GATE_CSS = `
+:host {
+  --bg: #1a1b26;
+  --fg: #c0caf5;
+  --accent: #7aa2f7;
+  --muted: #565f89;
+  --font: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, monospace;
+}
+.gate { width: 100%; }
+.gate-input {
+  display: block;
+  width: calc(100% - 16vw);
+  margin: 0 8vw 10vh;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  outline: none;
+  appearance: none;
+  font: 16px/1.8 var(--font);
+  letter-spacing: 0.02em;
+  font-weight: 400;
+  padding: 8px 0;
+  caret-color: color-mix(in srgb, var(--accent) 70%, var(--fg));
+  caret-animation: manual;
+}
+.gate-input::selection {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg);
+}
+#veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: linear-gradient(
+    to top,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 82%, transparent) 24%,
+    transparent 52%
   );
-} else {
+  color: var(--fg);
+  font-family: var(--font);
+  color-scheme: dark;
+}
+#veil.open { display: flex; }
+`;
+
+function init() {
+  if (location.protocol === "chrome-extension:" || isShintoNewtab()) return;
+
+  if (window !== window.top) {
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        if (!isLocationShortcut(event) && !isNewPageShortcut(event)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        chrome.runtime.sendMessage({
+          type: isNewPageShortcut(event) ? "new-page" : "focus-location",
+        });
+      },
+      true
+    );
+    return;
+  }
+
   boot();
 }
 
 function boot() {
-  const cssReady = Promise.all([
-    fetch(chrome.runtime.getURL("theme.css")).then((r) => r.text()),
-    fetch(chrome.runtime.getURL("gate.css")).then((r) => r.text()),
-  ]).then(([theme, gate]) => `${theme}\n${gate}`);
-
   let host = null;
   let input = null;
   let open = false;
-  let pending = false;
 
-  async function mount() {
+  function mount() {
     if (host) return;
-    const css = await cssReady;
     const root = document.documentElement;
     if (!root) return;
     host = document.createElement("div");
     host.setAttribute("data-shinto", "omnibox");
+    host.style.cssText = "position:absolute;width:0;height:0;overflow:visible;";
     const shadow = host.attachShadow({ mode: "closed" });
     shadow.innerHTML = `
-      <style>
-        ${css}
-        #veil {
-          position: fixed;
-          inset: 0;
-          z-index: 2147483647;
-          display: none;
-          flex-direction: column;
-          justify-content: flex-end;
-          background: linear-gradient(
-            to top,
-            var(--bg) 0%,
-            color-mix(in srgb, var(--bg) 82%, transparent) 24%,
-            transparent 52%
-          );
-          color: var(--fg);
-          font-family: var(--font);
-          color-scheme: dark;
-        }
-        #veil.open { display: flex; }
-      </style>
+      <style>${GATE_CSS}</style>
       <div id="veil">
         <form class="gate" autocomplete="off" spellcheck="false">
-          <input class="gate-input" type="text" autocapitalize="off" autocorrect="off" />
+          <input class="gate-input" type="text" spellcheck="false" />
         </form>
       </div>
     `;
@@ -112,16 +140,20 @@ function boot() {
 
     root.appendChild(host);
     host._veil = veil;
-    if (pending) show();
+
+    fetch(chrome.runtime.getURL("theme.css"))
+      .then((r) => r.text())
+      .then((css) => {
+        const style = document.createElement("style");
+        style.textContent = css;
+        shadow.appendChild(style);
+      })
+      .catch(() => {});
   }
 
   function show() {
-    if (!host || !input) {
-      pending = true;
-      mount();
-      return;
-    }
-    pending = false;
+    mount();
+    if (!host || !input) return;
     open = true;
     host._veil.classList.add("open");
     input.value = location.href;
@@ -137,7 +169,6 @@ function boot() {
   function hide() {
     if (!host) return;
     open = false;
-    pending = false;
     host._veil.classList.remove("open");
     input.blur();
   }
@@ -169,5 +200,11 @@ function boot() {
     if (msg?.type === "focus-location") show();
   });
 
-  mount();
+  if (document.documentElement) mount();
+  else document.addEventListener("DOMContentLoaded", mount, { once: true });
+}
+
+if (!globalThis.__shintoGate) {
+  globalThis.__shintoGate = true;
+  init();
 }
