@@ -76,6 +76,31 @@ const GATE_CSS = `
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--fg);
 }
+.gate-complete {
+  width: calc(100% - 16vw);
+  margin: 0 8vw 0.35em;
+  padding-left: calc(1.15em + 0.4em);
+  display: flex;
+  flex-direction: column;
+  gap: 0.05em;
+}
+.gate-complete[hidden] { display: none; }
+.gate-complete button {
+  all: unset;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  color: color-mix(in srgb, var(--fg) 40%, transparent);
+  font: 15px/1.45 var(--font);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gate-complete button[aria-selected="true"] {
+  color: var(--fg);
+}
 #veil {
   position: fixed;
   inset: 0;
@@ -159,6 +184,7 @@ function boot() {
       hide();
       if (url) location.href = url;
     });
+    if (typeof attachGateComplete === "function") attachGateComplete(input, form);
 
     veil.addEventListener("mousedown", (event) => {
       if (event.target === veil) hide();

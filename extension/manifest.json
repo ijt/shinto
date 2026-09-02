@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Shinto",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "One window, one page. Hyprland is the tab bar.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAscy6kS4vdkQew8R6SSp0bjlDSpFZrgnwIhLvpReVyr7UWhk9JhMXCk7f/NB+oOxsBP1oORBMtsrEo+WS4sUtbNXB5Lo+YFvF8dghaXNr86DCgZmderEjLTjpLGaweoLpPJ+znFu8HThZ/A6bB4hg/DzskIIja+jy+XHYHdvLM4FrA7kdc8T7D/SsEC5dy3FykyedakEsiCLZQtUkk+LrJecI8xWo5sR7OhubkPbeBQSUh52KiPsWiPpsq9O9gJlxZ/5BkKx94T56IsnuMyJb76rnMvzrELdyyWqnDV279+YlGdHhzqLItOmRmw3h+8D4j+SksueLB9W2+Lh0QnHtPQIDAQAB",
   "icons": {
@@ -9,7 +9,7 @@
     "48": "icon.png",
     "128": "icon.png"
   },
-  "permissions": ["tabs", "windows", "commands", "scripting"],
+  "permissions": ["tabs", "windows", "commands", "scripting", "history", "storage"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["overlay.js"],
+      "js": ["complete.js", "overlay.js"],
       "run_at": "document_start",
       "all_frames": true
     }

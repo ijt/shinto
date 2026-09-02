@@ -43,6 +43,7 @@ Browser (inside a Shinto window):
 |-----|--------|
 | `Ctrl + T` | New page (new window) |
 | `Ctrl + L` / `Ctrl + K` | Overlay omnibox |
+| `↑` / `↓` / `Tab` | Complete from typed URLs, history, Google |
 | `Ctrl + W` / `Super + Q` | Close this page |
 
 Hyprland groups (these are the tabs):
