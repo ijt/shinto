@@ -76,29 +76,80 @@ async function openNewPage() {
   }
 }
 
-async function stashEdit(url, token) {
-  const r = await fetch("http://127.0.0.1:18764/stash", {
-    method: "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: gateUrl(url), n: token }),
-  });
-  const data = await r.json();
-  return data && data.n ? String(data.n) : token;
+function editDest(url) {
+  const href = gateUrl(url);
+  return (
+    LOCAL_NEWTAB +
+    "?n=" +
+    Date.now() +
+    (href ? "#" + encodeURIComponent(href) : "")
+  );
 }
 
 async function editHere(tabId, url) {
-  const token = String(tabId || Date.now());
-  const n = await stashEdit(url, token);
-  const dest = `${LOCAL_NEWTAB}?n=${encodeURIComponent(n)}`;
-  if (tabId != null) {
-    try {
-      await chrome.tabs.update(tabId, { url: dest });
-    } catch (err) {
-      console.warn("shinto: edit-here", err);
-    }
+  const dest = editDest(url);
+  if (tabId == null) return { dest };
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (next) => {
+        location.href = next;
+      },
+      args: [dest],
+    });
+  } catch (err) {
+    console.warn("shinto: edit-here", err);
   }
   return { dest };
+}
+
+function isOurGate(url) {
+  return (
+    typeof url === "string" &&
+    url.includes("/newtab.html") &&
+    (url.includes("127.0.0.1") || url.includes("localhost"))
+  );
+}
+
+function isSpare(url) {
+  return typeof url === "string" && url.includes("spare.html");
+}
+
+function isChromiumNewTab(url) {
+  if (typeof url !== "string" || !url) return false;
+  if (url.startsWith("chrome://newtab") || url.startsWith("chrome://new-tab-page")) return true;
+  if (url.startsWith("chrome-extension://") && url.includes("newtab.html")) return true;
+  return false;
+}
+
+async function replaceChromiumNewTab(win) {
+  for (let i = 0; i < 20; i++) {
+    let tabs;
+    try {
+      tabs = await chrome.tabs.query({ windowId: win.id });
+    } catch {
+      return;
+    }
+    const tab = tabs[0];
+    if (!tab) {
+      await new Promise((r) => setTimeout(r, 40));
+      continue;
+    }
+    const url = tab.pendingUrl || tab.url || "";
+    if (isSpare(url) || isOurGate(url)) return;
+    if (/^https?:/i.test(url) && !url.includes("127.0.0.1")) return;
+    if (isChromiumNewTab(url)) {
+      try {
+        await chrome.windows.remove(win.id);
+      } catch {
+        return;
+      }
+      openNewPage();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 40));
+  }
 }
 
 chrome.tabs.onCreated.addListener((tab) => {
@@ -106,8 +157,11 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 chrome.windows.onCreated.addListener((win) => {
-  if (skipWindow(win) || win.type !== "normal") return;
-  explodeWindow(win.id);
+  if (skipWindow(win)) return;
+  if (win.type === "normal") explodeWindow(win.id);
+  // Chromium Ctrl+N opens chrome-extension://…/newtab.html (pencil bar).
+  // Replace it with the loopback --app gate.
+  replaceChromiumNewTab(win);
 });
 
 chrome.runtime.onInstalled.addListener(async () => {

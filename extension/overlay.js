@@ -34,12 +34,9 @@ if (location.protocol !== "chrome-extension:" && window === window.top) {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (onGate) return;
-        chrome.runtime.sendMessage({ type: "edit-here", url: location.href }, (res) => {
-          if (chrome.runtime.lastError) return;
-          if (!res || !res.dest) return;
-          if (location.pathname.endsWith("/newtab.html")) return;
-          location.href = res.dest;
-        });
+        // Navigate this window. Do not wait on tabs.update — it is a no-op in --app.
+        location.href =
+          LOCAL_NEWTAB + "?n=" + Date.now() + "#" + encodeURIComponent(location.href);
         return;
       }
       if (isNewWindowShortcut(event)) {

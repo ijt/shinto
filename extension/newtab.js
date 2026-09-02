@@ -52,18 +52,34 @@ function caretAtEnd() {
   }
 }
 
-const token = new URLSearchParams(location.search).get("n") || "";
-fetch("/pending-edit?n=" + encodeURIComponent(token))
-  .then((r) => r.json())
-  .then((data) => {
-    if (data && data.url) {
-      input.value = data.url;
-      input.focus();
-      caretAtEnd();
-      requestAnimationFrame(caretAtEnd);
-    }
-  })
-  .catch(() => {});
+function readHashUrl() {
+  try {
+    const hash = (location.hash || "").replace(/^#/, "");
+    if (hash) return decodeURIComponent(hash);
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+function applyPrefill(url) {
+  if (!url) return;
+  input.value = url;
+  input.focus();
+  caretAtEnd();
+  requestAnimationFrame(caretAtEnd);
+}
+
+const fromHash = readHashUrl();
+if (fromHash) {
+  applyPrefill(fromHash);
+} else {
+  const token = new URLSearchParams(location.search).get("n") || "";
+  fetch("/pending-edit?n=" + encodeURIComponent(token))
+    .then((r) => r.json())
+    .then((data) => applyPrefill(data && data.url))
+    .catch(() => {});
+}
 
 window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.defaultPrevented) return;
