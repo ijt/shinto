@@ -39,16 +39,13 @@ const GATE_CSS = `
 }
 .gate { width: 100%; }
 .gate-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.4em;
   width: calc(100% - 16vw);
   margin: 0 8vw 10vh;
   border-bottom: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
 }
 .gate-input {
-  flex: 1;
-  min-width: 0;
+  display: block;
+  width: 100%;
   margin: 0;
   border: 0;
   border-radius: 0;
@@ -63,15 +60,6 @@ const GATE_CSS = `
   caret-color: color-mix(in srgb, var(--accent) 70%, var(--fg));
   caret-animation: manual;
 }
-.gate-mark {
-  flex: none;
-  width: 1.15em;
-  height: 1.05em;
-  display: block;
-  color: var(--accent);
-  opacity: 0.42;
-  pointer-events: none;
-}
 .gate-input::selection {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--fg);
@@ -79,7 +67,6 @@ const GATE_CSS = `
 .gate-complete {
   width: calc(100% - 16vw);
   margin: 0 8vw 0.35em;
-  padding-left: calc(1.15em + 0.4em);
   display: flex;
   flex-direction: column;
   gap: 0.05em;
@@ -161,14 +148,6 @@ function boot() {
       <div id="veil">
         <form class="gate" autocomplete="off" spellcheck="false">
           <div class="gate-row">
-            <svg class="gate-mark" viewBox="16 32 96 66" aria-hidden="true">
-              <g fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 34h92" />
-                <path d="M28 50h72" />
-                <path d="M40 34v62" />
-                <path d="M88 34v62" />
-              </g>
-            </svg>
             <input class="gate-input" type="text" spellcheck="false" />
           </div>
         </form>
