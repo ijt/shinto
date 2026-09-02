@@ -1,0 +1,508 @@
+#!/usr/bin/env bash
+# Shinto — one window, one page. This wrapper keeps Chromium warm so a new
+# page is a singleton handoff, not a cold start.
+
+set -euo pipefail
+
+SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+EXT_SRC="$SCRIPT_DIR/extension"
+
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/shinto"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+EXT_DIR="$DATA_HOME/extension"
+PROFILE_DIR="$DATA_HOME/profile"
+NEWTAB_ID="badlilcpkdpfckbkeaejdnpinhejkiao"
+NEWTAB_URL="chrome-extension://${NEWTAB_ID}/newtab.html"
+LAUNCH_URL="chrome-extension://${NEWTAB_ID}/launch.html"
+SPARE_URL="chrome-extension://${NEWTAB_ID}/spare.html"
+SPARE_CLASS="chrome-badlilcpkdpfckbkeaejdnpinhejkiao__spare.html-Default"
+CONTROL_SOCK="${XDG_RUNTIME_DIR:-/tmp}/shinto.sock"
+HOST_SCRIPT="$SCRIPT_DIR/native-host.py"
+
+CHROMIUM_BIN="${SHINTO_CHROMIUM:-/usr/lib/chromium/chromium}"
+OMARCHY_EXTS=/usr/share/omarchy/default/chromium/extensions
+COLORS_TOML="${HOME}/.local/state/omarchy/current/theme/colors.toml"
+
+usage() {
+  cat <<'EOF'
+Usage: shinto [command] [url]
+
+  shinto [url]       Open a page (starts the warm daemon if needed)
+  shinto daemon      Run the persistent Chromium process (systemd)
+  shinto install     Bind Super+Shift+Return, autostart daemon
+  shinto uninstall   Restore the Chromium keybind, stop daemon
+  shinto start|stop|status
+  shinto theme       Refresh overlay colors from the Omarchy theme
+  shinto default     Make Shinto the XDG / Omarchy default browser
+EOF
+}
+
+toml_color() {
+  local key=$1
+  local fallback=$2
+  local value
+  [[ -f $COLORS_TOML ]] || {
+    printf '%s\n' "$fallback"
+    return
+  }
+  value=$(awk -F' = ' -v k="$key" '$1 == k { gsub(/[" ]/, "", $2); print $2; exit }' "$COLORS_TOML")
+  printf '%s\n' "${value:-$fallback}"
+}
+
+write_theme() {
+  mkdir -p "$EXT_DIR"
+  cat >"$EXT_DIR/theme.css" <<EOF
+:root {
+  --bg: $(toml_color background "#1a1b26");
+  --fg: $(toml_color bright_foreground "#c0caf5");
+  --accent: $(toml_color accent "#7aa2f7");
+  --muted: $(toml_color dark_foreground "#565f89");
+  --card: $(toml_color lighter_background "#24283b");
+  --font: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, monospace;
+}
+EOF
+}
+
+sync_extension() {
+  mkdir -p "$EXT_DIR"
+  cp -a "$EXT_SRC"/. "$EXT_DIR"/
+  write_theme
+}
+
+install_native_host() {
+  local manifest
+  manifest=$(cat <<EOF
+{
+  "name": "org.shinto.control",
+  "description": "Shinto page-open socket",
+  "path": "$HOST_SCRIPT",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://${NEWTAB_ID}/"
+  ]
+}
+EOF
+)
+  local dir
+  for dir in "$PROFILE_DIR/NativeMessagingHosts" "$HOME/.config/chromium/NativeMessagingHosts"; do
+    mkdir -p "$dir"
+    printf '%s\n' "$manifest" >"$dir/org.shinto.control.json"
+  done
+}
+
+seed_profile() {
+  mkdir -p "$PROFILE_DIR/Default"
+  [[ -f $PROFILE_DIR/First\ Run ]] || : >"$PROFILE_DIR/First Run"
+  local prefs=$PROFILE_DIR/Default/Preferences
+  if [[ ! -f $prefs ]]; then
+    cat >"$prefs" <<'EOF'
+{
+  "bookmark_bar": { "show_on_all_tabs": false },
+  "browser": { "has_seen_welcome_page": true },
+  "background_mode": { "enabled": true },
+  "profile": { "exit_type": "Normal" },
+  "session": { "restore_on_startup": 5 }
+}
+EOF
+  fi
+  install_native_host
+}
+
+extension_list() {
+  # Toolbar-action extensions (Copy URL, yt-dlp) put buttons on popup
+  # windows. Keep the spike chromeless; those commands come back in phase 2.
+  printf '%s' "$EXT_DIR"
+}
+
+chromium_env() {
+  export CHROME_WRAPPER=shinto
+  export CHROME_DESKTOP=shinto.desktop
+}
+
+chromium_base_args() {
+  CHROMIUM_ARGS=(
+    --user-data-dir="$PROFILE_DIR"
+    --class=shinto
+    --ozone-platform=wayland
+    --ozone-platform-hint=wayland
+    --password-store=gnome-libsecret
+    --enable-features=TouchpadOverscrollHistoryNavigation
+    --disable-features=TranslateUI,MediaRouter
+    --no-first-run
+    --no-default-browser-check
+    --disable-sync
+    --disable-session-crashed-bubble
+    --hide-crash-restore-bubble
+    --load-extension="$(extension_list)"
+  )
+}
+
+run_chromium() {
+  chromium_env
+  chromium_base_args
+  "$CHROMIUM_BIN" "${CHROMIUM_ARGS[@]}" "$@"
+}
+
+singleton_ready() {
+  [[ -S $PROFILE_DIR/SingletonSocket || -f $PROFILE_DIR/SingletonLock ]]
+}
+
+wait_for_singleton() {
+  local i
+  for i in $(seq 1 80); do
+    singleton_ready && return 0
+    sleep 0.05
+  done
+  return 1
+}
+
+daemon_running() {
+  systemctl --user is-active --quiet shinto.service 2>/dev/null && return 0
+  singleton_ready
+}
+
+spare_address() {
+  command -v hyprctl >/dev/null || return 0
+  hyprctl clients -j 2>/dev/null | python3 -c "
+import json, sys
+klass = sys.argv[1]
+try:
+    clients = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+for c in clients:
+    if c.get('class') == klass or c.get('initialClass') == klass:
+        print(c.get('address', ''))
+        break
+    title = c.get('title') or ''
+    initial = c.get('initialTitle') or ''
+    if 'spare.html' in title or 'spare.html' in initial or title == 'Shinto Spare':
+        print(c.get('address', ''))
+        break
+" "$SPARE_CLASS"
+}
+
+ensure_spare() {
+  local addr
+  addr=$(spare_address || true)
+  [[ -n ${addr:-} ]] && return 0
+  run_chromium --app="$SPARE_URL" >/dev/null 2>&1 || true
+}
+
+wait_for_socket() {
+  local i
+  for i in $(seq 1 50); do
+    [[ -S $CONTROL_SOCK ]] && return 0
+    sleep 0.05
+  done
+  return 1
+}
+
+poke() {
+  python3 - "$CONTROL_SOCK" "$1" "${2:-}" <<'PY'
+import json, socket, sys
+sock_path, kind, url = sys.argv[1], sys.argv[2], sys.argv[3]
+msg = {"type": kind}
+if url:
+    msg["url"] = url
+payload = json.dumps(msg).encode()
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sock_path)
+s.sendall(payload)
+s.close()
+PY
+}
+
+open_page() {
+  local target=${1:-}
+  if ! daemon_running; then
+    if systemctl --user list-unit-files shinto.service >/dev/null 2>&1; then
+      systemctl --user start shinto.service || true
+      wait_for_singleton || true
+    else
+      sync_extension
+      seed_profile
+    fi
+  fi
+  if [[ -S $CONTROL_SOCK ]] && poke new-page 2>/dev/null && [[ -z $target ]]; then
+    return
+  fi
+  if [[ -S $CONTROL_SOCK && -n $target ]] && poke open "$target" 2>/dev/null; then
+    return
+  fi
+  if [[ -n $target ]]; then
+    run_chromium --app="$target" >/dev/null 2>&1 || true
+  else
+    run_chromium --app="$NEWTAB_URL" >/dev/null 2>&1 || true
+  fi
+}
+
+run_daemon() {
+  sync_extension
+  seed_profile
+  chromium_env
+  chromium_base_args
+  # The spare window *is* the keep-alive. Hyprland parks it on a silent
+  # special workspace so closing every visible page does not quit Chromium.
+  exec "$CHROMIUM_BIN" "${CHROMIUM_ARGS[@]}" --app="$SPARE_URL"
+}
+
+install_desktop() {
+  mkdir -p "$HOME/.local/share/applications"
+  cat >"$HOME/.local/share/applications/shinto.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Shinto
+Comment=Page viewer for Omarchy — one window, one page
+Exec=$HOME/.local/bin/shinto %u
+Icon=$EXT_SRC/icon.png
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/about;x-scheme-handler/unknown;
+StartupNotify=false
+StartupWMClass=shinto
+EOF
+  command -v update-desktop-database >/dev/null &&
+    update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+}
+
+set_mime_default() {
+  local desktop=shinto.desktop
+  local mime
+  for mime in text/html text/xml application/xhtml+xml \
+    x-scheme-handler/http x-scheme-handler/https \
+    x-scheme-handler/about x-scheme-handler/unknown; do
+    xdg-mime default "$desktop" "$mime" >/dev/null 2>&1 || true
+  done
+}
+
+patch_mimeapps() {
+  local file=$HOME/.config/mimeapps.list
+  mkdir -p "$HOME/.config"
+  python3 - "$file" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text() if path.exists() else "[Default Applications]\n"
+repls = (
+    "text/html",
+    "text/xml",
+    "application/xhtml+xml",
+    "x-scheme-handler/http",
+    "x-scheme-handler/https",
+    "x-scheme-handler/about",
+    "x-scheme-handler/unknown",
+)
+if "[Default Applications]" not in text:
+    text = "[Default Applications]\n" + text
+lines = text.splitlines()
+seen = set()
+out = []
+in_default = False
+for line in lines:
+    if line.strip() == "[Default Applications]":
+        in_default = True
+        out.append(line)
+        continue
+    if line.startswith("[") and line.strip() != "[Default Applications]":
+        if in_default:
+            for mime in repls:
+                if mime not in seen:
+                    out.append(f"{mime}=shinto.desktop")
+                    seen.add(mime)
+        in_default = False
+        out.append(line)
+        continue
+    if in_default and "=" in line and not line.lstrip().startswith("#"):
+        key = line.split("=", 1)[0].strip()
+        if key in repls:
+            out.append(f"{key}=shinto.desktop")
+            seen.add(key)
+            continue
+    out.append(line)
+if in_default:
+    for mime in repls:
+        if mime not in seen:
+            out.append(f"{mime}=shinto.desktop")
+path.write_text("\n".join(out).rstrip() + "\n")
+PY
+}
+
+install_default() {
+  install_desktop
+  patch_mimeapps
+  set_mime_default
+  env -u BROWSER xdg-settings set default-web-browser shinto.desktop
+}
+
+restore_default() {
+  local file=$HOME/.config/mimeapps.list
+  if [[ -f $file ]]; then
+    python3 - "$file" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace("=shinto.desktop", "=chromium.desktop")
+path.write_text(text)
+PY
+  fi
+  env -u BROWSER xdg-settings set default-web-browser chromium.desktop >/dev/null 2>&1 || true
+  local mime
+  for mime in text/html x-scheme-handler/http x-scheme-handler/https; do
+    xdg-mime default chromium.desktop "$mime" >/dev/null 2>&1 || true
+  done
+}
+
+install_systemd() {
+  mkdir -p "$CONFIG_HOME/systemd/user"
+  cat >"$CONFIG_HOME/systemd/user/shinto.service" <<EOF
+[Unit]
+Description=Shinto warm browser daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=$SCRIPT_PATH daemon
+Restart=always
+RestartSec=1
+Environment=HOME=%h
+Environment=XDG_RUNTIME_DIR=%t
+PassEnvironment=WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE FONTCONFIG_PATH FONTCONFIG_FILE
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now shinto.service
+}
+
+install_hypr() {
+  local dest=$CONFIG_HOME/hypr/shinto.lua
+  cp "$SCRIPT_DIR/hypr.lua" "$dest"
+  local main=$CONFIG_HOME/hypr/hyprland.lua
+  if [[ -f $main ]] && ! grep -q 'require("hypr.shinto")' "$main"; then
+    printf '\n-- Shinto page viewer\nrequire("hypr.shinto")\n' >>"$main"
+  fi
+  local bindings=$CONFIG_HOME/hypr/bindings.lua
+  if [[ -f $bindings ]] && ! grep -q 'Shinto' "$bindings"; then
+    cat >>"$bindings" <<EOF
+
+-- Shinto: Super+Shift+Return opens a warm page window.
+-- Super+Shift+B stays Omarchy's default-browser launcher (Chromium unless you change it).
+hl.unbind("SUPER + SHIFT + RETURN")
+o.bind("SUPER + SHIFT + RETURN", "Shinto", "$HOME/.local/bin/shinto")
+hl.unbind("SUPER + SHIFT + Y")
+o.bind("SUPER + SHIFT + Y", "YouTube", "$HOME/.local/bin/shinto https://youtube.com/")
+EOF
+  fi
+  if command -v hyprctl >/dev/null; then
+    hyprctl reload >/dev/null
+    hyprctl configerrors || true
+  fi
+}
+
+install_path() {
+  mkdir -p "$HOME/.local/bin"
+  ln -sfn "$SCRIPT_PATH" "$HOME/.local/bin/shinto"
+}
+
+install_theme_hook() {
+  if command -v omarchy >/dev/null; then
+    omarchy hook install theme-set "$SCRIPT_DIR/theme-set-hook.sh" >/dev/null 2>&1 || true
+  fi
+}
+
+do_install() {
+  sync_extension
+  seed_profile
+  install_path
+  install_desktop
+  install_hypr
+  install_systemd
+  install_theme_hook
+  echo "Shinto installed."
+  echo "Super+Shift+Return opens Shinto. Super+Shift+B / xdg-open stay on the XDG default."
+  echo "Hyprland groups (the tabs): Super+G, Super+Ctrl+Left/Right, Super+Alt+1-4."
+}
+
+do_uninstall() {
+  systemctl --user disable --now shinto.service 2>/dev/null || true
+  rm -f "$CONFIG_HOME/systemd/user/shinto.service"
+  rm -f "$HOME/.local/bin/shinto"
+  rm -f "$HOME/.local/share/applications/shinto.desktop"
+  rm -f "$CONFIG_HOME/hypr/shinto.lua"
+  if [[ -f $CONFIG_HOME/hypr/hyprland.lua ]]; then
+    python3 - <<'PY'
+from pathlib import Path
+p = Path.home() / ".config/hypr/hyprland.lua"
+text = p.read_text()
+needle = "\n-- Shinto page viewer\nrequire(\"hypr.shinto\")\n"
+p.write_text(text.replace(needle, "\n"))
+PY
+  fi
+  if [[ -f $CONFIG_HOME/hypr/bindings.lua ]]; then
+    python3 - <<'PY'
+from pathlib import Path
+p = Path.home() / ".config/hypr/bindings.lua"
+text = p.read_text()
+start = text.find("\n-- Shinto: Super+Shift+Return")
+if start != -1:
+    p.write_text(text[:start].rstrip() + "\n")
+PY
+  fi
+  if [[ $(env -u BROWSER xdg-settings get default-web-browser 2>/dev/null) == shinto.desktop ]]; then
+    restore_default
+  fi
+  systemctl --user daemon-reload 2>/dev/null || true
+  if command -v hyprctl >/dev/null; then
+    hyprctl reload >/dev/null || true
+  fi
+  echo "Shinto uninstalled. Profile left in $PROFILE_DIR"
+}
+
+cmd=${1:-}
+case $cmd in
+  -h | --help | help)
+    usage
+    ;;
+  daemon)
+    run_daemon
+    ;;
+  install)
+    do_install
+    ;;
+  uninstall)
+    do_uninstall
+    ;;
+  start)
+    systemctl --user start shinto.service
+    ;;
+  stop)
+    systemctl --user stop shinto.service
+    ;;
+  status)
+    systemctl --user status shinto.service --no-pager || true
+    ;;
+  theme)
+    sync_extension
+    ;;
+  default)
+    install_default
+    echo "Shinto is the default browser ($(env -u BROWSER xdg-settings get default-web-browser))."
+    ;;
+  *)
+    # omarchy-launch-browser maps --private to --incognito / --inprivate.
+    while [[ ${1:-} == --incognito || ${1:-} == --private || ${1:-} == --inprivate ]]; do
+      shift
+    done
+    if [[ ${1:-} == --* ]]; then
+      usage >&2
+      exit 2
+    fi
+    open_page "${1:-}"
+    ;;
+esac

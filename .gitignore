@@ -1,0 +1,3 @@
+.shinto-extension.pem
+*.pyc
+__pycache__/

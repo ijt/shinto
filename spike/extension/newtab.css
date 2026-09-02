@@ -1,0 +1,54 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+}
+
+.void {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.mark {
+  position: absolute;
+  width: min(28vw, 180px);
+  opacity: 0.07;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+#go {
+  width: min(640px, calc(100vw - 48px));
+}
+
+#q {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--card) 88%, black);
+  color: var(--fg);
+  font: 16px/1.4 var(--font);
+  padding: 14px 18px;
+  border-radius: 14px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 80%, black),
+    0 18px 50px color-mix(in srgb, black 35%, transparent);
+}
+
+#q::placeholder {
+  color: var(--muted);
+}
+
+#q:focus {
+  border-color: var(--accent);
+}
+
+

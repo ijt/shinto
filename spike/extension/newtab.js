@@ -1,0 +1,37 @@
+"use strict";
+
+function toUrl(raw) {
+  const q = raw.trim();
+  if (!q) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(q)) return q;
+  if (q.startsWith("//")) return "https:" + q;
+  if (/^localhost(:\d+)?(\/|$)/i.test(q)) return "http://" + q;
+  if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/|$)/.test(q)) return "http://" + q;
+  if (/^\S+\.\S+$/.test(q) && !/\s/.test(q)) return "https://" + q;
+  return "https://duckduckgo.com/?q=" + encodeURIComponent(q);
+}
+
+const form = document.getElementById("go");
+const input = document.getElementById("q");
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const url = toUrl(input.value);
+  if (url) location.href = url;
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.altKey || event.metaKey) return;
+  if (event.ctrlKey && event.key.toLowerCase() === "t") {
+    event.preventDefault();
+    chrome.runtime.sendMessage({ type: "new-page" });
+    return;
+  }
+  if (event.ctrlKey && event.key.toLowerCase() === "l") {
+    event.preventDefault();
+    input.focus();
+    input.select();
+  }
+});
+
+input.focus();
