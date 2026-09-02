@@ -18,3 +18,19 @@ body {
   flex-direction: column;
   justify-content: flex-end;
 }
+
+.fuji {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--accent);
+  opacity: 0.12;
+  -webkit-mask-image: url("fuji.png");
+  mask-image: url("fuji.png");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: min(92vw, 1080px) auto;
+  mask-size: min(92vw, 1080px) auto;
+  -webkit-mask-position: center 36%;
+  mask-position: center 36%;
+}

@@ -59,5 +59,5 @@ Hyprland groups (these are the tabs):
 
 - Dedicated Chromium profile at `~/.local/share/shinto/profile` — your main Chromium logins are untouched.
 - Overlay omnibox on the new-tab page (`Ctrl+L` on http(s) pages too).
-- Empty `Super + Shift + Return` opens a loopback new-tab page so Chromium does not draw the custom tab bar (title + pencil). Address line at the bottom, character-sized torii at the right.
+- Empty `Super + Shift + Return` opens a loopback new-tab page so Chromium does not draw the custom tab bar (title + pencil). Hazy Fuji in the void, address line at the bottom, character-sized torii at the right.
 - `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG). `shinto default` points that at Shinto.
