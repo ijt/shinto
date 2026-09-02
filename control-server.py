@@ -23,7 +23,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _from_extension(self) -> bool:
         origin = self.headers.get("Origin", "")
-        return origin.startswith("chrome-extension://")
+        if origin.startswith("chrome-extension://"):
+            return True
+        # Extension service-worker fetch to loopback sometimes omits Origin.
+        return origin == "" and self.client_address[0] in ("127.0.0.1", "::1")
 
     def do_POST(self) -> None:
         path = unquote(urlparse(self.path).path)
