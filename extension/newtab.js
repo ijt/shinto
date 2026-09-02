@@ -22,20 +22,27 @@ form.addEventListener("submit", (event) => {
 
 document.addEventListener("mousedown", () => input.focus());
 
-document.addEventListener("keydown", (event) => {
-  if (event.altKey || event.metaKey) return;
-  if (event.ctrlKey && event.key.toLowerCase() === "t") {
-    event.preventDefault();
-    if (typeof chrome !== "undefined" && chrome.runtime) {
-      chrome.runtime.sendMessage({ type: "new-page" });
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.altKey || event.metaKey) return;
+    const key = event.key.toLowerCase();
+    if (event.ctrlKey && (event.code === "KeyT" || key === "t")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (typeof chrome !== "undefined" && chrome.runtime) {
+        chrome.runtime.sendMessage({ type: "new-page" });
+      }
+      return;
     }
-    return;
-  }
-  if (event.ctrlKey && event.key.toLowerCase() === "l") {
-    event.preventDefault();
-    input.focus();
-    input.select();
-  }
-});
+    if (event.ctrlKey && (event.code === "KeyL" || event.code === "KeyK" || key === "l" || key === "k")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      input.focus();
+      input.select();
+    }
+  },
+  true
+);
 
 input.focus();

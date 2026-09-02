@@ -1,0 +1,38 @@
+.mark {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(52vw, 380px);
+  height: auto;
+  color: var(--accent);
+  opacity: 0.04;
+  pointer-events: none;
+}
+
+.gate {
+  width: 100%;
+}
+
+.gate-input {
+  display: block;
+  width: calc(100% - 16vw);
+  margin: 0 8vw 10vh;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  outline: none;
+  appearance: none;
+  font: 16px/1.8 var(--font);
+  letter-spacing: 0.02em;
+  font-weight: 400;
+  padding: 8px 0;
+  caret-color: color-mix(in srgb, var(--accent) 70%, var(--fg));
+  caret-animation: manual;
+}
+
+.gate-input::selection {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg);
+}

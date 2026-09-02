@@ -5,19 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Shinto</title>
     <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="gate.css" />
     <link rel="stylesheet" href="newtab.css" />
   </head>
   <body>
     <svg class="mark" viewBox="0 0 128 128" aria-hidden="true">
-      <g fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="square">
+      <g fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M18 34h92" />
         <path d="M28 50h72" />
         <path d="M40 34v62" />
         <path d="M88 34v62" />
       </g>
     </svg>
-    <form id="go" autocomplete="off" spellcheck="false">
-      <input id="q" name="q" type="text" autofocus />
+    <form id="go" class="gate" autocomplete="off" spellcheck="false">
+      <input id="q" class="gate-input" name="q" type="text" autofocus />
     </form>
     <script src="newtab.js"></script>
   </body>

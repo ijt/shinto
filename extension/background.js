@@ -84,8 +84,18 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-chrome.commands.onCommand.addListener((command) => {
+async function focusLocation(tabId) {
+  if (tabId == null) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: "focus-location" }, { frameId: 0 });
+  } catch (err) {
+    console.warn("shinto: focus-location", err);
+  }
+}
+
+chrome.commands.onCommand.addListener((command, tab) => {
   if (command === "new-page") openNewPage();
+  if (command === "focus-location") focusLocation(tab?.id);
 });
 
 async function openUrl(url) {
@@ -96,13 +106,17 @@ async function openUrl(url) {
   });
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "new-page") {
     openNewPage().then(() => sendResponse({ ok: true }));
     return true;
   }
   if (msg?.type === "open") {
     openUrl(msg.url).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "focus-location") {
+    focusLocation(sender.tab?.id).then(() => sendResponse({ ok: true }));
     return true;
   }
   return false;

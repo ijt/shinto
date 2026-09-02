@@ -6,8 +6,10 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
+  color-scheme: dark;
   font-family: var(--font);
 }
 
@@ -15,34 +17,4 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-}
-
-.mark {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(42vw, 280px);
-  height: auto;
-  color: var(--accent);
-  opacity: 0.08;
-  pointer-events: none;
-}
-
-#go {
-  width: 100%;
-}
-
-#q {
-  display: block;
-  width: calc(100% - 56px);
-  margin: 0 28px 32px;
-  border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 55%, var(--muted));
-  border-radius: 0;
-  background: transparent;
-  color: var(--fg);
-  outline: none;
-  font: 18px/1.6 var(--font);
-  padding: 10px 0;
-  caret-color: var(--accent);
 }

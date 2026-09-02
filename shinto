@@ -49,7 +49,8 @@ toml_color() {
 write_theme() {
   mkdir -p "$EXT_DIR"
   cat >"$EXT_DIR/theme.css" <<EOF
-:root {
+:root,
+:host {
   --bg: $(toml_color background "#1a1b26");
   --fg: $(toml_color bright_foreground "#c0caf5");
   --accent: $(toml_color accent "#7aa2f7");

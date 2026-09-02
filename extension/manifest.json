@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Shinto",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One window, one page. Hyprland is the tab bar.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAscy6kS4vdkQew8R6SSp0bjlDSpFZrgnwIhLvpReVyr7UWhk9JhMXCk7f/NB+oOxsBP1oORBMtsrEo+WS4sUtbNXB5Lo+YFvF8dghaXNr86DCgZmderEjLTjpLGaweoLpPJ+znFu8HThZ/A6bB4hg/DzskIIja+jy+XHYHdvLM4FrA7kdc8T7D/SsEC5dy3FykyedakEsiCLZQtUkk+LrJecI8xWo5sR7OhubkPbeBQSUh52KiPsWiPpsq9O9gJlxZ/5BkKx94T56IsnuMyJb76rnMvzrELdyyWqnDV279+YlGdHhzqLItOmRmw3h+8D4j+SksueLB9W2+Lh0QnHtPQIDAQAB",
   "icons": {
@@ -21,13 +21,18 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["overlay.js"],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "commands": {
     "new-page": {
       "suggested_key": { "default": "Ctrl+T" },
       "description": "Open a new page (window)"
+    },
+    "focus-location": {
+      "suggested_key": { "default": "Ctrl+L" },
+      "description": "Edit this page's address"
     }
   }
 }
