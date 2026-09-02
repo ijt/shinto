@@ -162,7 +162,7 @@ run_daemon() {
   seed_profile
   chromium_env
   chromium_base_args
-  python3 "$SCRIPT_DIR/control-server.py" "$EXT_DIR" &
+  python3 "$SCRIPT_DIR/control-server.py" "$EXT_DIR" "$SCRIPT_PATH" &
   local i
   for i in $(seq 1 40); do
     if curl -sf --max-time 0.2 "http://127.0.0.1:${LOCAL_PORT}/newtab.html" >/dev/null; then

@@ -6,11 +6,13 @@ from __future__ import annotations
 import mimetypes
 import os
 import pathlib
+import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+SHINTO_BIN = sys.argv[2] if len(sys.argv) > 2 else "shinto"
 PORT = int(os.environ.get("SHINTO_PORT", "18764"))
 PORT_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "shinto.port")
 
@@ -19,8 +21,32 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_args) -> None:
         return
 
+    def _from_extension(self) -> bool:
+        origin = self.headers.get("Origin", "")
+        return origin.startswith("chrome-extension://")
+
+    def do_POST(self) -> None:
+        path = unquote(urlparse(self.path).path)
+        if path != "/open" or not self._from_extension():
+            self.send_error(403)
+            return
+        subprocess.Popen(
+            [SHINTO_BIN],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:
         path = unquote(urlparse(self.path).path)
+        if path == "/open":
+            self.send_error(405)
+            return
         if path in ("", "/"):
             path = "/newtab.html"
         rel = path.lstrip("/")

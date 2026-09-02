@@ -61,11 +61,14 @@ async function onTabCreated(tab) {
 const LOCAL_NEWTAB = "http://127.0.0.1:18764/newtab.html";
 
 async function openNewPage() {
-  await chrome.windows.create({
-    url: `${LOCAL_NEWTAB}?n=${Date.now()}`,
-    type: "popup",
-    focused: true,
-  });
+  try {
+    await fetch("http://127.0.0.1:18764/open", {
+      method: "POST",
+      cache: "no-store",
+    });
+  } catch (err) {
+    console.warn("shinto: open", err);
+  }
 }
 
 chrome.tabs.onCreated.addListener((tab) => {
