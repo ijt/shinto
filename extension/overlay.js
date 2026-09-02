@@ -38,12 +38,19 @@ const GATE_CSS = `
   --font: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, monospace;
 }
 .gate { width: 100%; }
-.gate-input {
-  display: block;
+.gate-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
   width: calc(100% - 16vw);
   margin: 0 8vw 10vh;
-  border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
+}
+.gate-input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--fg);
@@ -55,6 +62,15 @@ const GATE_CSS = `
   padding: 8px 0;
   caret-color: color-mix(in srgb, var(--accent) 70%, var(--fg));
   caret-animation: manual;
+}
+.gate-mark {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  margin-bottom: 0.12em;
+  color: var(--accent);
+  opacity: 0.42;
+  pointer-events: none;
 }
 .gate-input::selection {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -119,7 +135,17 @@ function boot() {
       <style>${GATE_CSS}</style>
       <div id="veil">
         <form class="gate" autocomplete="off" spellcheck="false">
-          <input class="gate-input" type="text" spellcheck="false" />
+          <div class="gate-row">
+            <input class="gate-input" type="text" spellcheck="false" />
+            <svg class="gate-mark" viewBox="0 0 128 128" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 34h92" />
+                <path d="M28 50h72" />
+                <path d="M40 34v62" />
+                <path d="M88 34v62" />
+              </g>
+            </svg>
+          </div>
         </form>
       </div>
     `;
