@@ -38,7 +38,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = unquote(urlparse(self.path).path)
-        if path != "/open" or not self._from_extension():
+        if path not in ("/open", "/stash") or not self._from_extension():
             self.send_error(403)
             return
         length = int(self.headers.get("Content-Length", "0") or 0)
@@ -55,16 +55,29 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(value, str) and value.startswith(("http://", "https://")):
                 return value[:2048]
             return ""
+        if path == "/stash":
+            if not self._from_extension():
+                self.send_error(403)
+                return
+            token = body.get("n")
+            if not isinstance(token, str) or not token:
+                token = str(time.time_ns())
+            edit = http_url(body.get("url"))
+            if edit:
+                PENDING[token] = edit
+            data = json.dumps({"n": token}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if path != "/open" or not self._from_extension():
+            self.send_error(403)
+            return
         app = http_url(body.get("app"))
-        edit = http_url(body.get("url"))
-        if app:
-            cmd = [SHINTO_BIN, app]
-        elif edit:
-            token = str(time.time_ns())
-            PENDING[token] = edit
-            cmd = [SHINTO_BIN, "--edit", token]
-        else:
-            cmd = [SHINTO_BIN]
+        cmd = [SHINTO_BIN, app] if app else [SHINTO_BIN]
         subprocess.Popen(
             cmd,
             start_new_session=True,

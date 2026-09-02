@@ -41,8 +41,8 @@ Browser (inside a Shinto window):
 
 | Key | Action |
 |-----|--------|
-| `Ctrl + T` | New empty page (new window) |
-| `Ctrl + L` / `Ctrl + K` | New window with this page's URL, caret at the end |
+| `Ctrl + T` / `Ctrl + N` | New empty page (new window) |
+| `Ctrl + L` / `Ctrl + K` | Edit this window's address (caret at the end). Escape goes back. |
 | `↑` / `↓` / `Tab` | Complete from typed URLs, history, Google |
 | `Ctrl + W` / `Super + Q` | Close this page |
 
@@ -59,6 +59,6 @@ Hyprland groups (these are the tabs):
 ## Notes
 
 - Dedicated Chromium profile at `~/.local/share/shinto/profile` — your main Chromium logins are untouched.
-- `Ctrl+T` opens a new empty window. `Ctrl+L` opens a new window with the current URL in the line and the caret at the end so you can backspace the tail. On the empty gate, Ctrl+L is a no-op. The current page stays put. Hyprland groups are the tabs.
+- `Ctrl+N` / `Ctrl+T` open a new empty window. `Ctrl+L` edits the address in this window (URL filled, caret at the end). Escape goes back. On the empty gate, Ctrl+L is a no-op.
 - Empty `Super + Shift + Return` opens a loopback new-tab page so Chromium does not draw the custom tab bar (title + pencil). Hazy Fuji in the void, address line at the bottom.
 - `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG). `shinto default` points that at Shinto.

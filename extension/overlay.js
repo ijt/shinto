@@ -1,5 +1,7 @@
 "use strict";
 
+const LOCAL_NEWTAB = "http://127.0.0.1:18764/newtab.html";
+
 function isShintoNewtab() {
   return (
     location.pathname.endsWith("/newtab.html") &&
@@ -8,14 +10,19 @@ function isShintoNewtab() {
 }
 
 function isLocationShortcut(event) {
-  if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.repeat) return false;
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey || event.repeat) {
+    return false;
+  }
   const key = event.key.toLowerCase();
   return event.code === "KeyL" || event.code === "KeyK" || key === "l" || key === "k";
 }
 
-function isNewPageShortcut(event) {
-  if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.repeat) return false;
-  return event.code === "KeyT" || event.key.toLowerCase() === "t";
+function isNewWindowShortcut(event) {
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey || event.repeat) {
+    return false;
+  }
+  const key = event.key.toLowerCase();
+  return event.code === "KeyT" || event.code === "KeyN" || key === "t" || key === "n";
 }
 
 if (location.protocol !== "chrome-extension:" && window === window.top) {
@@ -26,10 +33,16 @@ if (location.protocol !== "chrome-extension:" && window === window.top) {
       if (isLocationShortcut(event)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (!onGate) chrome.runtime.sendMessage({ type: "new-page", url: location.href });
+        if (onGate) return;
+        chrome.runtime.sendMessage({ type: "edit-here", url: location.href }, (res) => {
+          if (chrome.runtime.lastError) return;
+          if (!res || !res.dest) return;
+          if (location.pathname.endsWith("/newtab.html")) return;
+          location.href = res.dest;
+        });
         return;
       }
-      if (isNewPageShortcut(event)) {
+      if (isNewWindowShortcut(event)) {
         event.preventDefault();
         event.stopImmediatePropagation();
         chrome.runtime.sendMessage({ type: "new-page" });

@@ -17,12 +17,7 @@ const input = document.getElementById("q");
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const url = toUrl(input.value);
-  if (!url) return;
-  fetch("/open", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ app: url }),
-  }).then(() => window.close());
+  if (url) location.href = url;
 });
 
 document.addEventListener("mousedown", () => input.focus());
@@ -32,7 +27,7 @@ window.addEventListener(
   (event) => {
     if (event.altKey || event.metaKey) return;
     const key = event.key.toLowerCase();
-    if (event.ctrlKey && (event.code === "KeyT" || key === "t")) {
+    if (event.ctrlKey && !event.shiftKey && (event.code === "KeyT" || event.code === "KeyN" || key === "t" || key === "n")) {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (typeof chrome !== "undefined" && chrome.runtime) {
@@ -69,6 +64,14 @@ fetch("/pending-edit?n=" + encodeURIComponent(token))
     }
   })
   .catch(() => {});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  if (history.length > 1) {
+    event.preventDefault();
+    history.back();
+  }
+});
 
 input.focus();
 caretAtEnd();

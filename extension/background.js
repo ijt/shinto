@@ -63,20 +63,42 @@ function gateUrl(url) {
   return "";
 }
 
-async function openNewPage(url) {
-  const body = {};
-  const edit = gateUrl(url);
-  if (edit) body.url = edit;
+async function openNewPage() {
   try {
     await fetch("http://127.0.0.1:18764/open", {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: "{}",
     });
   } catch (err) {
     console.warn("shinto: open", err);
   }
+}
+
+async function stashEdit(url, token) {
+  const r = await fetch("http://127.0.0.1:18764/stash", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: gateUrl(url), n: token }),
+  });
+  const data = await r.json();
+  return data && data.n ? String(data.n) : token;
+}
+
+async function editHere(tabId, url) {
+  const token = String(tabId || Date.now());
+  const n = await stashEdit(url, token);
+  const dest = `${LOCAL_NEWTAB}?n=${encodeURIComponent(n)}`;
+  if (tabId != null) {
+    try {
+      await chrome.tabs.update(tabId, { url: dest });
+    } catch (err) {
+      console.warn("shinto: edit-here", err);
+    }
+  }
+  return { dest };
 }
 
 chrome.tabs.onCreated.addListener((tab) => {
@@ -111,12 +133,14 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   }
   if (command === "focus-location") {
     let url = tab?.url || "";
-    if (!url) {
+    let tabId = tab?.id;
+    if (!url || tabId == null) {
       const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      url = tabs[0]?.url || "";
+      url = tabs[0]?.url || url;
+      tabId = tabs[0]?.id ?? tabId;
     }
     if (isAddressEntry(url)) return;
-    openNewPage(url);
+    await editHere(tabId, url);
   }
 });
 
@@ -277,7 +301,11 @@ async function completeQuery(q) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "new-page") {
-    openNewPage(msg.url).then(() => sendResponse({ ok: true }));
+    openNewPage().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "edit-here") {
+    editHere(sender.tab?.id, msg.url).then((res) => sendResponse(res));
     return true;
   }
   if (msg?.type === "open") {
@@ -285,7 +313,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "focus-location") {
-    openNewPage(msg.url).then(() => sendResponse({ ok: true }));
+    editHere(sender.tab?.id, msg.url || sender.tab?.url).then((res) => sendResponse(res));
     return true;
   }
   if (msg?.type === "typed") {
