@@ -117,14 +117,30 @@ function isSpare(url) {
 }
 
 function isChromiumNewTab(url) {
-  if (typeof url !== "string" || !url) return false;
+  if (typeof url !== "string") return false;
+  if (!url || url === "about:blank") return "wait";
   if (url.startsWith("chrome://newtab") || url.startsWith("chrome://new-tab-page")) return true;
-  if (url.startsWith("chrome-extension://") && url.includes("newtab.html")) return true;
+  if (url.startsWith("chrome-extension://") && url.includes("newtab")) return true;
   return false;
 }
 
+const replacingWindows = new Set();
+
+async function reclaimNewTabWindow(winId) {
+  if (replacingWindows.has(winId)) return;
+  replacingWindows.add(winId);
+  try {
+    await chrome.windows.remove(winId);
+  } catch {
+    replacingWindows.delete(winId);
+    return;
+  }
+  replacingWindows.delete(winId);
+  openNewPage();
+}
+
 async function replaceChromiumNewTab(win) {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 25; i++) {
     let tabs;
     try {
       tabs = await chrome.tabs.query({ windowId: win.id });
@@ -138,14 +154,12 @@ async function replaceChromiumNewTab(win) {
     }
     const url = tab.pendingUrl || tab.url || "";
     if (isSpare(url) || isOurGate(url)) return;
-    if (/^https?:/i.test(url) && !url.includes("127.0.0.1")) return;
-    if (isChromiumNewTab(url)) {
-      try {
-        await chrome.windows.remove(win.id);
-      } catch {
-        return;
-      }
-      openNewPage();
+    if (/^https?:/i.test(url) && !url.includes("127.0.0.1") && !url.includes("localhost")) {
+      return;
+    }
+    const kind = isChromiumNewTab(url);
+    if (kind === true || (kind === "wait" && i >= 8)) {
+      await reclaimNewTabWindow(win.id);
       return;
     }
     await new Promise((r) => setTimeout(r, 40));
@@ -156,11 +170,17 @@ chrome.tabs.onCreated.addListener((tab) => {
   onTabCreated(tab);
 });
 
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  if (!info.url) return;
+  if (isSpare(info.url) || isOurGate(info.url)) return;
+  if (isChromiumNewTab(info.url) !== true) return;
+  reclaimNewTabWindow(tab.windowId);
+});
+
 chrome.windows.onCreated.addListener((win) => {
   if (skipWindow(win)) return;
   if (win.type === "normal") explodeWindow(win.id);
-  // Chromium Ctrl+N opens chrome-extension://…/newtab.html (pencil bar).
-  // Replace it with the loopback --app gate.
+  // Chromium Ctrl+N opens a stock/extension NTP with the Shinto+pencil bar.
   replaceChromiumNewTab(win);
 });
 
