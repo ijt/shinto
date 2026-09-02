@@ -38,19 +38,12 @@ window.addEventListener(
     if (event.ctrlKey && (event.code === "KeyL" || event.code === "KeyK" || key === "l" || key === "k")) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      input.focus();
-      input.select();
+      if (typeof chrome !== "undefined" && chrome.runtime) {
+        chrome.runtime.sendMessage({ type: "new-page" });
+      }
     }
   },
   true
 );
-
-window.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || event.defaultPrevented) return;
-  if (history.length > 1) {
-    event.preventDefault();
-    history.back();
-  }
-});
 
 input.focus();

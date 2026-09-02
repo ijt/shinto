@@ -1,7 +1,6 @@
 "use strict";
 
 const moving = new Set();
-const NEWTAB = chrome.runtime.getURL("newtab.html");
 
 function skipWindow(win) {
   return !win || win.type === "devtools" || win.incognito;
@@ -59,9 +58,11 @@ async function onTabCreated(tab) {
   }
 }
 
+const LOCAL_NEWTAB = "http://127.0.0.1:18764/newtab.html";
+
 async function openNewPage() {
   await chrome.windows.create({
-    url: NEWTAB,
+    url: `${LOCAL_NEWTAB}?n=${Date.now()}`,
     type: "popup",
     focused: true,
   });
@@ -84,46 +85,13 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-async function resolveTabId(hint) {
-  if (hint != null) return hint;
-  const queries = [
-    { active: true, lastFocusedWindow: true },
-    { active: true, currentWindow: true },
-    { lastFocusedWindow: true },
-  ];
-  for (const q of queries) {
-    const tabs = await chrome.tabs.query(q);
-    const id = tabs.find((t) => t.id != null)?.id;
-    if (id != null) return id;
-  }
-  return undefined;
-}
-
-const LOCAL_NEWTAB = "http://127.0.0.1:18764/newtab.html";
-
-async function focusLocation(tabId) {
-  const id = await resolveTabId(tabId);
-  if (id == null) return;
-  try {
-    const tab = await chrome.tabs.get(id);
-    const url = tab.url || "";
-    if (url.includes("/newtab.html") && (url.includes("127.0.0.1") || url.includes("localhost"))) {
-      return;
-    }
-    await chrome.tabs.update(id, { url: LOCAL_NEWTAB });
-  } catch (err) {
-    console.warn("shinto: focus-location", err);
-  }
-}
-
-chrome.commands.onCommand.addListener((command, tab) => {
-  if (command === "new-page") openNewPage();
-  if (command === "focus-location") focusLocation(tab?.id);
+chrome.commands.onCommand.addListener((command) => {
+  if (command === "new-page" || command === "focus-location") openNewPage();
 });
 
 async function openUrl(url) {
   await chrome.windows.create({
-    url: url || NEWTAB,
+    url: url || LOCAL_NEWTAB,
     type: "popup",
     focused: true,
   });
@@ -276,7 +244,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "focus-location") {
-    focusLocation(sender.tab?.id).then(() => sendResponse({ ok: true }));
+    openNewPage().then(() => sendResponse({ ok: true }));
     return true;
   }
   if (msg?.type === "typed") {
