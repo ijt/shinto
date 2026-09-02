@@ -6,7 +6,6 @@ set -euo pipefail
 
 SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
-REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 EXT_SRC="$SCRIPT_DIR/extension"
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/shinto"
@@ -112,7 +111,7 @@ EOF
 
 extension_list() {
   # Toolbar-action extensions (Copy URL, yt-dlp) put buttons on popup
-  # windows. Keep the spike chromeless; those commands come back in phase 2.
+  # windows. Keep the chrome off the page; those commands can come back later.
   printf '%s' "$EXT_DIR"
 }
 

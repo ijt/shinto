@@ -4,8 +4,6 @@ A page viewer for Omarchy. One window is one document. Hyprland is the tab bar.
 
 Zen reimplements workspaces, split view, and tabs inside the browser because most desktops are bad at those. Omarchy is not. Shinto is the shrine: a gate you walk through (the overlay omnibox) and then it is gone.
 
-This repo is in **phase 1** — a Chromium spike that proves the window model and the fast path. Phase 2 is a chromeless Qt WebEngine shell with the same contract.
-
 ## Why it starts fast
 
 Stock Chromium on `Super + Shift + Return` feels slow because closing the last window kills the process. The next launch is a cold start.
@@ -21,7 +19,7 @@ Omarchy / Hyprland. Chromium is the renderer; Hyprland groups are the tabs.
 ```bash
 git clone https://github.com/ijt/shinto.git
 cd shinto
-./spike/shinto install
+./shinto install
 ```
 
 That will:
@@ -34,7 +32,7 @@ That will:
 `Super + Shift + B` and `xdg-open` stay on Chromium unless you opt in with `shinto default`.
 
 ```bash
-./spike/shinto uninstall   # profile is left in ~/.local/share/shinto
+./shinto uninstall   # profile is left in ~/.local/share/shinto
 ```
 
 ## Keys
@@ -61,5 +59,5 @@ Hyprland groups (these are the tabs):
 
 - Dedicated Chromium profile at `~/.local/share/shinto/profile` — your main Chromium logins are untouched.
 - Overlay omnibox on the new-tab page (`Ctrl+L` on http(s) pages too).
-- Chromium `--app` windows still draw a thin tab strip. That leftover chrome is why phase 2 exists (Qt WebEngine shell). The spike is for the window model and the fast path.
+- Chromium `--app` windows still draw a thin title chip. The page is the point; Hyprland is the rest of the chrome.
 - `Super + Shift + B` remains stock Chromium.
