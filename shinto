@@ -13,9 +13,11 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 EXT_DIR="$DATA_HOME/extension"
 PROFILE_DIR="$DATA_HOME/profile"
 NEWTAB_ID="badlilcpkdpfckbkeaejdnpinhejkiao"
-SPARE_URL="chrome-extension://${NEWTAB_ID}/spare.html"
 LOCAL_PORT="${SHINTO_PORT:-18764}"
 LOCAL_NEWTAB="http://127.0.0.1:${LOCAL_PORT}/newtab.html"
+# Keep-alive must be the same origin as the gate. chrome-extension:// spare
+# makes every later window "out of scope" → Shinto+pencil bar.
+SPARE_URL="http://127.0.0.1:${LOCAL_PORT}/spare.html"
 
 CHROMIUM_BIN="${SHINTO_CHROMIUM:-/usr/lib/chromium/chromium}"
 COLORS_TOML="${HOME}/.local/state/omarchy/current/theme/colors.toml"
