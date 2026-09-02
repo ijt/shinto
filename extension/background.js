@@ -60,11 +60,22 @@ async function onTabCreated(tab) {
 
 const LOCAL_NEWTAB = "http://127.0.0.1:18764/newtab.html";
 
-async function openNewPage() {
+function gateUrl(url) {
+  if (typeof url !== "string") return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return "";
+}
+
+async function openNewPage(url) {
+  const body = {};
+  const edit = gateUrl(url);
+  if (edit) body.url = edit;
   try {
     await fetch("http://127.0.0.1:18764/open", {
       method: "POST",
       cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
   } catch (err) {
     console.warn("shinto: open", err);
@@ -108,7 +119,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
       url = tabs[0]?.url || "";
     }
     if (isAddressEntry(url)) return;
-    openNewPage();
+    openNewPage(url);
   }
 });
 
@@ -259,7 +270,7 @@ async function completeQuery(q) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "new-page") {
-    openNewPage().then(() => sendResponse({ ok: true }));
+    openNewPage(msg.url).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (msg?.type === "open") {
@@ -267,7 +278,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "focus-location") {
-    openNewPage().then(() => sendResponse({ ok: true }));
+    openNewPage(msg.url).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (msg?.type === "typed") {

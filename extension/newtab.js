@@ -43,4 +43,16 @@ window.addEventListener(
   true
 );
 
+const prefill = new URLSearchParams(location.search).get("u");
+if (prefill) input.value = prefill;
 input.focus();
+function caretAtEnd() {
+  const n = input.value.length;
+  try {
+    input.setSelectionRange(n, n);
+  } catch {
+    /* ignore */
+  }
+}
+caretAtEnd();
+requestAnimationFrame(caretAtEnd);

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import mimetypes
 import os
 import pathlib
@@ -33,8 +34,23 @@ class Handler(BaseHTTPRequestHandler):
         if path != "/open" or not self._from_extension():
             self.send_error(403)
             return
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        raw = self.rfile.read(min(length, 8192)) if length else b""
+        url = ""
+        if raw:
+            try:
+                body = json.loads(raw.decode())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                body = {}
+            if isinstance(body, dict):
+                candidate = body.get("url")
+                if isinstance(candidate, str) and candidate.startswith(("http://", "https://")):
+                    url = candidate[:2048]
+        cmd = [SHINTO_BIN]
+        if url:
+            cmd.extend(["--edit", url])
         subprocess.Popen(
-            [SHINTO_BIN],
+            cmd,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,

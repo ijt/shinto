@@ -26,7 +26,7 @@ if (location.protocol !== "chrome-extension:" && window === window.top) {
       if (isLocationShortcut(event)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (!onGate) chrome.runtime.sendMessage({ type: "new-page" });
+        if (!onGate) chrome.runtime.sendMessage({ type: "new-page", url: location.href });
         return;
       }
       if (isNewPageShortcut(event)) {

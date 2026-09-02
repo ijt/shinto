@@ -137,8 +137,7 @@ daemon_running() {
   singleton_ready
 }
 
-open_page() {
-  local target=${1:-}
+ensure_daemon() {
   if ! daemon_running; then
     if systemctl --user list-unit-files shinto.service >/dev/null 2>&1; then
       systemctl --user start shinto.service || true
@@ -148,13 +147,34 @@ open_page() {
       seed_profile
     fi
   fi
+}
+
+open_gate() {
+  local url=${1:-}
+  local app="${LOCAL_NEWTAB}?n=$(date +%s%N)"
+  if [[ -n $url ]]; then
+    local enc
+    enc=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$url")
+    app="${app}&u=${enc}"
+  fi
+  # Serve newtab over loopback so --app stays in-scope and Chromium
+  # does not draw the custom tab bar (title + pencil).
+  run_chromium --app="$app" >/dev/null 2>&1 || true
+}
+
+open_page() {
+  local target=${1:-}
+  ensure_daemon
   if [[ -n $target ]]; then
     run_chromium --app="$target" >/dev/null 2>&1 || true
   else
-    # Serve newtab over loopback so --app stays in-scope and Chromium
-    # does not draw the custom tab bar (title + pencil).
-    run_chromium --app="${LOCAL_NEWTAB}?n=$(date +%s%N)" >/dev/null 2>&1 || true
+    open_gate
   fi
+}
+
+open_edit() {
+  ensure_daemon
+  open_gate "${1:-}"
 }
 
 run_daemon() {
@@ -419,6 +439,10 @@ case $cmd in
   default)
     install_default
     echo "Shinto is the default browser ($(env -u BROWSER xdg-settings get default-web-browser))."
+    ;;
+  --edit)
+    shift
+    open_edit "${1:-}"
     ;;
   *)
     # omarchy-launch-browser maps --private to --incognito / --inprivate.
