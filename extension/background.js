@@ -88,8 +88,28 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-chrome.commands.onCommand.addListener((command) => {
-  if (command === "new-page" || command === "focus-location") openNewPage();
+function isAddressEntry(url) {
+  return (
+    typeof url === "string" &&
+    url.includes("/newtab.html") &&
+    (url.includes("127.0.0.1") || url.includes("localhost"))
+  );
+}
+
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command === "new-page") {
+    openNewPage();
+    return;
+  }
+  if (command === "focus-location") {
+    let url = tab?.url || "";
+    if (!url) {
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      url = tabs[0]?.url || "";
+    }
+    if (isAddressEntry(url)) return;
+    openNewPage();
+  }
 });
 
 async function openUrl(url) {

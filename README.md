@@ -58,6 +58,6 @@ Hyprland groups (these are the tabs):
 ## Notes
 
 - Dedicated Chromium profile at `~/.local/share/shinto/profile` — your main Chromium logins are untouched.
-- `Ctrl+L` / `Ctrl+T` open a new empty window. The current page stays put. Hyprland groups are the tabs.
+- `Ctrl+L` / `Ctrl+T` open a new empty window. The current page stays put. On the empty gate, Ctrl+L is a no-op. Hyprland groups are the tabs.
 - Empty `Super + Shift + Return` opens a loopback new-tab page so Chromium does not draw the custom tab bar (title + pencil). Hazy Fuji in the void, address line at the bottom.
 - `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG). `shinto default` points that at Shinto.

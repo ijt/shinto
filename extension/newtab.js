@@ -38,9 +38,6 @@ window.addEventListener(
     if (event.ctrlKey && (event.code === "KeyL" || event.code === "KeyK" || key === "l" || key === "k")) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (typeof chrome !== "undefined" && chrome.runtime) {
-        chrome.runtime.sendMessage({ type: "new-page" });
-      }
     }
   },
   true
