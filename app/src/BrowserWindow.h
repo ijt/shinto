@@ -23,6 +23,7 @@ class QResizeEvent;
 
 namespace shinto {
 
+class FindBar;
 class OmniboxOverlay;
 class WebView;
 
@@ -68,6 +69,7 @@ class BrowserWindow : public QMainWindow {
                 const QString &url);
 
   void relayout();
+  void relayoutFindBar();
   void enterEmpty();
   void showGateOverPage();
   void onOverlayNavigate(const QString &url, const QString &typedQuery);
@@ -75,6 +77,11 @@ class BrowserWindow : public QMainWindow {
   void onNewPageShortcut();
   void onEditAddressShortcut();
   void onBackShortcut();
+  void onFindShortcut();
+  // `backward` selects QWebEnginePage::FindBackward -- the ↑/previous
+  // direction. An empty `text` just clears any existing highlighting
+  // (searchChanged's "cleared the box" case) rather than searching.
+  void doFind(const QString &text, bool backward);
 
   HistoryStore *history_;
   PopularDomains *domains_;
@@ -84,6 +91,7 @@ class BrowserWindow : public QMainWindow {
   ShintoConfig config_;
   WebView *webView_;
   OmniboxOverlay *overlay_;
+  FindBar *findBar_;
   State state_ = State::Empty;
   // Recording (both `visited` and `typed`) is deferred to loadFinished(true)
   // -- see the constructor -- rather than done eagerly on request, so a

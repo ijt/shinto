@@ -28,6 +28,7 @@ qt_add_executable(shinto-bin
   src/HistoryStore.cpp
   src/PopularDomains.cpp
   src/OmniboxOverlay.cpp
+  src/FindBar.cpp
   src/BrowserWindow.cpp
   src/SingletonServer.cpp
   src/SingletonClient.cpp

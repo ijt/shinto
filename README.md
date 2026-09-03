@@ -81,6 +81,7 @@ Browser (inside a Shinto window):
 | `Ctrl + T` / `Ctrl + N` | New empty page (new window) |
 | `Ctrl + L` / `Ctrl + K` | Edit this window's address (whole address selected, so typing replaces it). Escape goes back. |
 | `Alt + Left` | Back (configurable, see [Configuration](#configuration)) |
+| `Ctrl + F` | Find in page. Enter/Shift+Enter or the ↓/↑ buttons step through matches, Escape closes it. |
 | `Ctrl + W` / `Super + Q` | Close this page |
 
 Hyprland groups (these are the tabs):

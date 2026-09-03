@@ -5,6 +5,7 @@
 #include <QShortcut>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWebEngineFindTextResult>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineHistory>
 #include <QWebEngineNewWindowRequest>
@@ -12,6 +13,7 @@
 #include <QWebEngineProfile>
 #include <QWebEngineView>
 
+#include "FindBar.h"
 #include "OmniboxOverlay.h"
 
 namespace shinto {
@@ -34,6 +36,7 @@ bool isShintoShortcut(const QKeyEvent *ke, const QKeySequence &backShortcut) {
     case Qt::Key_L:
     case Qt::Key_K:
     case Qt::Key_W:
+    case Qt::Key_F:
       return true;
     default:
       return false;
@@ -129,6 +132,7 @@ void BrowserWindow::applyPaletteToAll(const Palette &palette) {
   currentPalette_ = palette;
   for (auto *w : instances_) {
     w->overlay_->applyPalette(palette);
+    w->findBar_->applyPalette(palette);
   }
 }
 
@@ -145,14 +149,29 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   overlay_ = new OmniboxOverlay(history_, domains_, &config_, container);
   overlay_->applyPalette(currentPalette_);
 
+  findBar_ = new FindBar(container);
+  findBar_->applyPalette(currentPalette_);
+
   auto *layout = new QVBoxLayout(container);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(webView_);
-  // overlay_ is deliberately not added to this layout -- BrowserWindow
-  // positions it directly on top of webView_ in relayout().
+  // overlay_/findBar_ are deliberately not added to this layout --
+  // BrowserWindow positions them directly on top of webView_ by hand
+  // (relayout()/relayoutFindBar()).
 
   connect(overlay_, &OmniboxOverlay::navigateRequested, this, &BrowserWindow::onOverlayNavigate);
   connect(overlay_, &OmniboxOverlay::cancelled, this, &BrowserWindow::onOverlayCancelled);
+
+  connect(findBar_, &FindBar::searchChanged, this,
+          [this](const QString &text) { doFind(text, /*backward=*/false); });
+  connect(findBar_, &FindBar::findNext, this,
+          [this] { doFind(findBar_->searchText(), /*backward=*/false); });
+  connect(findBar_, &FindBar::findPrevious, this,
+          [this] { doFind(findBar_->searchText(), /*backward=*/true); });
+  connect(findBar_, &FindBar::closed, this, [this] {
+    webView_->page()->findText(QString());
+    webView_->setFocus();
+  });
 
   // A guarded record on urlChanged/titleChanged (rather than only in
   // loadFinished below) still matters for single-page apps that change
@@ -236,6 +255,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_K), &BrowserWindow::onEditAddressShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), [this] { close(); });
   addShortcut(config_.backShortcut, &BrowserWindow::onBackShortcut);
+  addShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), &BrowserWindow::onFindShortcut);
 
   if (url.isEmpty()) {
     enterEmpty();
@@ -251,6 +271,7 @@ BrowserWindow::~BrowserWindow() { instances_.removeOne(this); }
 void BrowserWindow::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
   relayout();
+  relayoutFindBar();
 }
 
 void BrowserWindow::relayout() {
@@ -259,6 +280,14 @@ void BrowserWindow::relayout() {
   if (state_ != State::Loaded) {
     overlay_->setGeometry(centralWidget()->rect());
   }
+}
+
+void BrowserWindow::relayoutFindBar() {
+  if (!findBar_->isVisible()) return;
+  constexpr int kMargin = 12;
+  const QSize hint = findBar_->sizeHint();
+  const int w = qMin(hint.width(), qMax(0, centralWidget()->width() - 2 * kMargin));
+  findBar_->setGeometry(centralWidget()->width() - w - kMargin, kMargin, w, hint.height());
 }
 
 void BrowserWindow::enterEmpty() {
@@ -329,6 +358,27 @@ void BrowserWindow::onBackShortcut() {
   // navigating a page the user isn't even looking at right now.
   if (state_ != State::Loaded) return;
   if (webView_->history()->canGoBack()) webView_->back();
+}
+
+void BrowserWindow::onFindShortcut() {
+  // Meaningless while the gate is up (Empty/Gate) -- there's no page
+  // underneath to search yet, or its content is hidden anyway.
+  if (state_ != State::Loaded) return;
+  findBar_->showBar();
+  relayoutFindBar();
+}
+
+void BrowserWindow::doFind(const QString &text, bool backward) {
+  if (text.isEmpty()) {
+    webView_->page()->findText(QString());
+    findBar_->setMatchCount(0, 0);
+    return;
+  }
+  QWebEnginePage::FindFlags flags;
+  if (backward) flags |= QWebEnginePage::FindBackward;
+  webView_->page()->findText(text, flags, [this](const QWebEngineFindTextResult &result) {
+    findBar_->setMatchCount(result.activeMatch(), result.numberOfMatches());
+  });
 }
 
 }  // namespace shinto
