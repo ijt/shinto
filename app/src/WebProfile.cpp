@@ -82,6 +82,11 @@ QWebEngineProfile *createSharedProfile(QObject *parent) {
   settings->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   settings->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
   settings->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
+  // Without this, sites (YouTube) detect no Fullscreen API and gray out
+  // the button with "Fullscreen is unavailable". Accepting the matching
+  // QWebEnginePage::fullScreenRequested signal is still required in
+  // BrowserWindow.
+  settings->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
 
   installScrollbarHidingScript(profile);
 

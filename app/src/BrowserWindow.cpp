@@ -5,6 +5,7 @@
 #include <QShortcut>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWebEngineFullScreenRequest>
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
@@ -136,6 +137,20 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
           [this](QWebEngineNewWindowRequest &request) {
             BrowserWindow::spawn(webView_->page()->profile(), history_, domains_,
                                   request.requestedUrl().toString());
+          });
+  // Fullscreen API: enablement lives on the shared profile; accepting the
+  // request here is what actually lets the element fill the viewport, and
+  // we mirror that with a real window fullscreen so YouTube/etc. leave the
+  // tiled Hyprland layout.
+  connect(webView_->page(), &QWebEnginePage::fullScreenRequested, this,
+          [this](QWebEngineFullScreenRequest request) {
+            if (request.toggleOn()) {
+              request.accept();
+              showFullScreen();
+            } else {
+              request.accept();
+              showNormal();
+            }
           });
 
   auto addShortcut = [this](const QKeySequence &seq, auto slot) {
