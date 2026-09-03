@@ -17,6 +17,7 @@
 #include "PopularDomains.h"
 #include "ThemeLoader.h"
 
+class QWebEngineNewWindowRequest;
 class QWebEngineProfile;
 class QResizeEvent;
 
@@ -37,6 +38,19 @@ class BrowserWindow : public QMainWindow {
   // already does.
   static BrowserWindow *spawn(QWebEngineProfile *profile, HistoryStore *history,
                                PopularDomains *domains, const QString &url);
+
+  // Fulfills a window.open()-driven popup request (target=_blank, JS
+  // window.open(), ctrl-click -- all route through
+  // QWebEnginePage::newWindowRequested) as a new BrowserWindow, same as
+  // spawn(), but via request.openIn() rather than a manually re-navigated
+  // fresh page. That preserves window.opener/postMessage back to the
+  // requesting page, which OAuth popup flows (Sign in with Apple/Google,
+  // etc.) need to report success -- an unrelated page that merely loads
+  // the same URL string has no such relationship and leaves those flows
+  // hung on a blank/unusable page instead.
+  static BrowserWindow *spawnForRequest(QWebEngineProfile *profile, HistoryStore *history,
+                                         PopularDomains *domains,
+                                         QWebEngineNewWindowRequest &request);
 
   // Re-applies a reloaded theme to every live window (the `shinto theme` /
   // Omarchy theme-set-hook path, delivered over the singleton socket).

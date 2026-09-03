@@ -101,6 +101,30 @@ BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *hi
   return win;
 }
 
+BrowserWindow *BrowserWindow::spawnForRequest(QWebEngineProfile *profile, HistoryStore *history,
+                                               PopularDomains *domains,
+                                               QWebEngineNewWindowRequest &request) {
+  BrowserWindow *win = spawn(profile, history, domains, QString());
+  // openIn() must be called before this handler (spawnForRequest is
+  // called synchronously from it) returns, or Qt rejects the window-open
+  // request outright -- see its own doc comment for why this, not
+  // request.requestedUrl(), is what actually fixes OAuth popups.
+  request.openIn(win->webView_->page());
+  // spawn(..., QString()) took the Empty path (enterEmpty(), gate showing
+  // over about:blank) since there's no URL to hand it yet at this point --
+  // openIn() just started the real navigation, so drive state_/the gate
+  // the same way onOverlayNavigate() does for an ordinary navigation.
+  connect(
+      win->webView_->page(), &QWebEnginePage::loadFinished, win,
+      [win](bool) {
+        win->state_ = State::Loaded;
+        win->overlay_->hideOverlay();
+        win->webView_->setFocus();
+      },
+      Qt::SingleShotConnection);
+  return win;
+}
+
 void BrowserWindow::applyPaletteToAll(const Palette &palette) {
   currentPalette_ = palette;
   for (auto *w : instances_) {
@@ -171,14 +195,20 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   connect(webView_->page(), &QWebEnginePage::loadProgress, overlay_, &OmniboxOverlay::setProgress);
   // The QtWebEngine equivalent of Chromium's "exploded" multi-tab windows:
   // target=_blank / window.open() / ctrl-click all route through this one
-  // signal. Redirecting to our own new window (and never calling
-  // request.openIn()) means the requesting page never gets a popup/tab of
-  // its own -- "one window, one page" holds structurally, not by racing to
-  // detect and close a stray window after the fact.
+  // signal -- fulfilled as a brand new BrowserWindow, so "one window, one
+  // page" still holds structurally. Delivered via spawnForRequest()
+  // (request.openIn(), not a manually re-navigated fresh page): OAuth
+  // popup flows (Sign in with Apple/Google, etc.) rely on window.opener /
+  // postMessage back to this page to report success, which only survives
+  // if the popup's actual page (the WebContents Chromium already created
+  // for window.open()) is what ends up on screen -- an unrelated page
+  // that merely loads the same URL string has no such relationship, and
+  // is exactly what used to leave those flows hung on a blank/unusable
+  // page (confirmed: "Continue with Apple" on x.com).
   connect(webView_->page(), &QWebEnginePage::newWindowRequested, this,
           [this](QWebEngineNewWindowRequest &request) {
-            BrowserWindow::spawn(webView_->page()->profile(), history_, domains_,
-                                  request.requestedUrl().toString());
+            BrowserWindow::spawnForRequest(webView_->page()->profile(), history_, domains_,
+                                            request);
           });
   // Fullscreen API: enablement lives on the shared profile; accepting the
   // request here is what actually lets the element fill the viewport, and
