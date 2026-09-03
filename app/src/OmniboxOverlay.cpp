@@ -307,19 +307,34 @@ void OmniboxOverlay::updateSuggestions() {
     double score;
   };
   QVector<Scored> candidates;
-  QSet<QString> seen;
+  QSet<QString> seenUrls;
+  QSet<QString> seenLabels;
   // "https://rubyonrails.org" and "https://rubyonrails.org/" are two
   // distinct SQLite `visited` rows (url is the PRIMARY KEY) if the site
   // was ever visited both ways -- completeVisited() can legitimately
   // return both. Dedup as everything is assembled, not just between
   // history and PopularDomains, so two history rows for the same site
   // don't both survive either.
+  //
+  // Also dedup by label, not just url: a search-derived history label is
+  // the raw typed.q text (see completeVisited()), recorded against
+  // whatever URL the navigation actually landed on -- which can be a
+  // *different* URL than a second, ordinary visited-page history row (or
+  // a PopularDomains entry) for what's, to the eye, obviously the same
+  // site. Confirmed concretely: visiting funkyimg.com (which redirects
+  // elsewhere) left both a `visited` row for the bare domain and a
+  // `typed` row (q="funkyimg.com") against the redirect target -- two
+  // rows, different urls, identical "funkyimg.com" label. A url-only key
+  // doesn't catch that; the label the user actually sees does.
   auto tryAdd = [&](const QString &label, const QString &url, SuggestionKind kind, double score) {
     // QSet::insert() (unlike std::set's) doesn't report whether the value
     // was already present, so check first.
-    const QString key = dedupKey(url);
-    if (seen.contains(key)) return;
-    seen.insert(key);
+    const QString urlKey = dedupKey(url);
+    const QString labelKey = label.trimmed().toLower();
+    if (seenUrls.contains(urlKey)) return;
+    if (!labelKey.isEmpty() && seenLabels.contains(labelKey)) return;
+    seenUrls.insert(urlKey);
+    if (!labelKey.isEmpty()) seenLabels.insert(labelKey);
     candidates.push_back({{label, url, kind}, score});
   };
   // A single blended ranking, not "history first, domains fill the rest":
