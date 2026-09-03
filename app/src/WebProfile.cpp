@@ -2,39 +2,11 @@
 
 #include <QDir>
 #include <QWebEngineProfile>
-#include <QWebEngineScript>
-#include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
 
 #include "Shinto.h"
 
 namespace shinto {
-
-namespace {
-
-// Scrollbars are visual clutter against this app's aesthetic (no chrome,
-// no boxes) -- content stays scrollable, the track/thumb are just never
-// drawn. Injected as a real stylesheet (not a Qt/Chromium flag) so it's
-// unconditional and can't get stuck in some other visual state the way
-// the OverlayScrollbar feature flag did.
-void installScrollbarHidingScript(QWebEngineProfile *profile) {
-  QWebEngineScript script;
-  script.setName(QStringLiteral("shinto-hide-scrollbars"));
-  script.setInjectionPoint(QWebEngineScript::DocumentCreation);
-  script.setWorldId(QWebEngineScript::MainWorld);
-  script.setRunsOnSubFrames(true);
-  script.setSourceCode(QStringLiteral(
-      "(function() {"
-      "  var s = document.createElement('style');"
-      "  s.textContent ="
-      "    '*{scrollbar-width:none!important;-ms-overflow-style:none!important;}"
-      "     *::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}';"
-      "  (document.documentElement || document).appendChild(s);"
-      "})();"));
-  profile->scripts()->insert(script);
-}
-
-}  // namespace
 
 QWebEngineProfile *createSharedProfile(QObject *parent) {
   const QString storage = webEngineStoragePath();
@@ -53,8 +25,6 @@ QWebEngineProfile *createSharedProfile(QObject *parent) {
   settings->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   settings->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
   settings->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
-
-  installScrollbarHidingScript(profile);
 
   return profile;
 }

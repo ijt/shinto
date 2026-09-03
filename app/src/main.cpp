@@ -48,11 +48,13 @@ int main(int argc, char *argv[]) {
   {
     QByteArray flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
     if (!flags.isEmpty()) flags += ' ';
-    // Tried --enable-features=OverlayScrollbar for thin, auto-hiding
-    // scrollbars, but its fade-out state gets stuck showing on a window
-    // when a *different* window steals focus (e.g. Ctrl+N) -- persists
-    // even after that new window closes. A stuck-visible scrollbar is
-    // worse than an always-visible one, so back to Chromium's default.
+    // Thin, auto-hiding scrollbars (shown only while scrolling), matching
+    // stock Chrome's own default look -- Chromium's own feature, not a
+    // hand-rolled CSS/JS hack. (An earlier "leftover scrollbar after
+    // Ctrl+N" report survived this flag being removed entirely, so it was
+    // never actually this feature's fault -- just the plain default
+    // scrollbar being visible, which is normal.)
+    flags += "--enable-features=OverlayScrollbar ";
     // This machine's Wayland/DRM GBM+EGL native-buffer path for GPU
     // compositing hits a hard Chromium-side failure (gbm_bo_import
     // returning nullptr, EGL_BAD_MATCH, then a fatal abort) -- reproduced
