@@ -15,6 +15,10 @@ class PopularDomains {
   struct Suggestion {
     QString label;  // the bare domain, e.g. "youtube.com"
     QString url;    // "https://" + label
+    // Source-list popularity rank, 0 = most popular. Lets a caller (see
+    // OmniboxOverlay's blended ranking against HistoryStore) weigh how
+    // strong a match this is, not just that it matched.
+    int rank;
   };
 
   // Loads and sorts the baked-in list once, along with any previously

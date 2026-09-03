@@ -81,7 +81,7 @@ QVector<PopularDomains::Suggestion> PopularDomains::complete(const QString &pref
   for (const Entry &e : matches) {
     if (out.size() >= limit) break;
     if (dismissed_.contains(e.domain)) continue;
-    out.push_back({e.domain, QStringLiteral("https://") + e.domain});
+    out.push_back({e.domain, QStringLiteral("https://") + e.domain, e.rank});
   }
   return out;
 }

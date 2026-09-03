@@ -16,6 +16,10 @@ class HistoryStore : public QObject {
   struct Suggestion {
     QString label;  // url with the scheme (and "www.") stripped for display
     QString url;
+    // How many times this URL has been visited. Lets a caller (see
+    // OmniboxOverlay's blended ranking against PopularDomains) weigh how
+    // strong a match this is, not just that it matched.
+    int visitCount;
   };
 
   explicit HistoryStore(QObject *parent = nullptr);

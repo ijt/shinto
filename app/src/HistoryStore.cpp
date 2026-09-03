@@ -121,7 +121,7 @@ QVector<HistoryStore::Suggestion> HistoryStore::completeVisited(const QString &p
   // visit_count DESC is the "weighted by frequency of use" ranking;
   // last_visit DESC breaks ties toward what's recent.
   query.prepare(QStringLiteral(
-      "SELECT v.url, t.q FROM visited v"
+      "SELECT v.url, t.q, v.visit_count FROM visited v"
       " LEFT JOIN typed t ON t.url = v.url"
       " WHERE v.url LIKE 'http://' || :p1 || '%' ESCAPE '\\'"
       "    OR v.url LIKE 'https://' || :p2 || '%' ESCAPE '\\'"
@@ -148,7 +148,8 @@ QVector<HistoryStore::Suggestion> HistoryStore::completeVisited(const QString &p
     // label -- most search-engine urls are the noisy one here, not most
     // visits, so this is the exception, not the rule.
     const QString typedQuery = query.value(1).toString();
-    out.push_back({typedQuery.isEmpty() ? displayLabel(url) : typedQuery, url});
+    const int visitCount = query.value(2).toInt();
+    out.push_back({typedQuery.isEmpty() ? displayLabel(url) : typedQuery, url, visitCount});
   }
   return out;
 }

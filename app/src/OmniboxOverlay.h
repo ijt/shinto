@@ -4,11 +4,13 @@
 // Ctrl+L on an already-loaded page (which shows this same blank gate over
 // the still-loaded page, rather than a prefilled address bar). A dropdown
 // appears below the input as you type, filling whatever vertical room the
-// window has (maxSuggestionRows()), blending two sources: the user's own
-// visited history (HistoryStore::completeVisited(), ranked by visit
-// frequency) filling first, then offline domain-prefix suggestions
-// (PopularDomains) filling whatever room is left. Nothing typed ever
-// leaves the machine to power either. Rows fade toward the background
+// window has (maxSuggestionRows()), blending two sources into one ranked
+// list rather than showing one before the other (updateSuggestions()): the
+// user's own visited history (HistoryStore::completeVisited()) and offline
+// domain-prefix suggestions (PopularDomains) -- a page you've actually used
+// usually wins, but a strong domain match can still outrank a history entry
+// you've only visited once or twice. Nothing typed ever leaves the machine
+// to power either. Rows fade toward the background
 // color going down the list (renderSuggestions()) so a long list reads as
 // "the top few matter most", not a wall of equally-loud text. Every row
 // has a per-row "x" button to dismiss it -- permanently, from HistoryStore

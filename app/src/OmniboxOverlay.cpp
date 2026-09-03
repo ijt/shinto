@@ -1,5 +1,7 @@
 #include "OmniboxOverlay.h"
 
+#include <algorithm>
+
 #include <QColor>
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
@@ -25,12 +27,6 @@ constexpr int kMargin = 24;
 // absurdly tall window (or a mis-measured row height) from turning into
 // hundreds of suggestions / an oversized domain-list query.
 constexpr int kMaxSuggestionsCap = 100;
-// Leaves at least a few slots for PopularDomains fallback suggestions even
-// when history has plenty of matches -- history is more relevant when it
-// has an answer, but a page you've visited once shouldn't crowd out every
-// domain suggestion. Small relative to kMaxSuggestionsCap on purpose: this
-// is "how many personal results at most", not a share of the full list.
-constexpr int kMaxHistorySuggestions = 8;
 // Rough estimate of a suggestion row's height, used only to decide how
 // many rows can fit -- doesn't need to be exact (layoutInput() measures
 // the real thing once rows exist), just close enough that the list
@@ -290,7 +286,13 @@ QColor blend(const QColor &from, const QColor &to, double t) {
 
 void OmniboxOverlay::updateSuggestions() {
   const QString text = input_->text();
-  QVector<Suggestion> combined;
+  const int maxTotal = maxSuggestionRows();
+
+  struct Scored {
+    Suggestion s;
+    double score;
+  };
+  QVector<Scored> candidates;
   QSet<QString> seen;
   // "https://rubyonrails.org" and "https://rubyonrails.org/" are two
   // distinct SQLite `visited` rows (url is the PRIMARY KEY) if the site
@@ -298,23 +300,37 @@ void OmniboxOverlay::updateSuggestions() {
   // return both. Dedup as everything is assembled, not just between
   // history and PopularDomains, so two history rows for the same site
   // don't both survive either.
-  auto tryAdd = [&](const QString &label, const QString &url, SuggestionKind kind) {
+  auto tryAdd = [&](const QString &label, const QString &url, SuggestionKind kind, double score) {
     // QSet::insert() (unlike std::set's) doesn't report whether the value
     // was already present, so check first.
     const QString key = dedupKey(url);
     if (seen.contains(key)) return;
     seen.insert(key);
-    combined.push_back({label, url, kind});
+    candidates.push_back({{label, url, kind}, score});
   };
-  const int maxTotal = maxSuggestionRows();
-  for (const auto &h : history_->completeVisited(text, qMin(kMaxHistorySuggestions, maxTotal))) {
-    tryAdd(h.label, h.url, SuggestionKind::History);
+  // A single blended ranking, not "history first, domains fill the rest":
+  // a page you've actually used should usually win, but a strong domain
+  // match can still outrank a history entry you've only visited once or
+  // twice. History score is visit_count itself, capped so one obsessively-
+  // visited page can't permanently bury every domain suggestion; domain
+  // score is scaled from its popularity rank so the single most popular
+  // domain in the list scores roughly like a page visited kDomainTopScore
+  // times -- competitive with a lightly-used history entry, not with a
+  // frequently-used one.
+  constexpr int kHistoryScoreCap = 20;
+  constexpr double kDomainTopScore = 5.0;
+  for (const auto &h : history_->completeVisited(text, maxTotal)) {
+    tryAdd(h.label, h.url, SuggestionKind::History, qMin(h.visitCount, kHistoryScoreCap));
   }
-  const int remaining = maxTotal - combined.size();
-  if (remaining > 0) {
-    for (const auto &d : domains_->complete(text, remaining)) {
-      tryAdd(d.label, d.url, SuggestionKind::Popular);
-    }
+  for (const auto &d : domains_->complete(text, maxTotal)) {
+    tryAdd(d.label, d.url, SuggestionKind::Popular, kDomainTopScore / double(d.rank + 1));
+  }
+  std::sort(candidates.begin(), candidates.end(),
+            [](const Scored &a, const Scored &b) { return a.score > b.score; });
+
+  QVector<Suggestion> combined;
+  for (int i = 0; i < candidates.size() && i < maxTotal; ++i) {
+    combined.push_back(candidates[i].s);
   }
   renderSuggestions(combined);
 }
