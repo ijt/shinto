@@ -116,21 +116,26 @@ QVector<HistoryStore::Suggestion> HistoryStore::completeVisited(const QString &p
   // A prefix match against the host (with or without a leading "www.",
   // over both schemes) covers the common case of typing a domain; the
   // title substring match covers recalling a page by what it's about
-  // rather than its URL. visit_count DESC is the "weighted by frequency
-  // of use" ranking; last_visit DESC breaks ties toward what's recent.
+  // rather than its URL; the LEFT JOIN against `typed` (matched on t.q
+  // too) covers recalling a past *search* by the words you searched for.
+  // visit_count DESC is the "weighted by frequency of use" ranking;
+  // last_visit DESC breaks ties toward what's recent.
   query.prepare(QStringLiteral(
-      "SELECT url, visit_count FROM visited"
-      " WHERE url LIKE 'http://' || :p1 || '%' ESCAPE '\\'"
-      "    OR url LIKE 'https://' || :p2 || '%' ESCAPE '\\'"
-      "    OR url LIKE 'http://www.' || :p3 || '%' ESCAPE '\\'"
-      "    OR url LIKE 'https://www.' || :p4 || '%' ESCAPE '\\'"
-      "    OR title LIKE '%' || :p5 || '%' ESCAPE '\\'"
-      " ORDER BY visit_count DESC, last_visit DESC LIMIT :limit"));
+      "SELECT v.url, t.q FROM visited v"
+      " LEFT JOIN typed t ON t.url = v.url"
+      " WHERE v.url LIKE 'http://' || :p1 || '%' ESCAPE '\\'"
+      "    OR v.url LIKE 'https://' || :p2 || '%' ESCAPE '\\'"
+      "    OR v.url LIKE 'http://www.' || :p3 || '%' ESCAPE '\\'"
+      "    OR v.url LIKE 'https://www.' || :p4 || '%' ESCAPE '\\'"
+      "    OR v.title LIKE '%' || :p5 || '%' ESCAPE '\\'"
+      "    OR t.q LIKE '%' || :p6 || '%' ESCAPE '\\'"
+      " ORDER BY v.visit_count DESC, v.last_visit DESC LIMIT :limit"));
   query.bindValue(":p1", escaped);
   query.bindValue(":p2", escaped);
   query.bindValue(":p3", escaped);
   query.bindValue(":p4", escaped);
   query.bindValue(":p5", escaped);
+  query.bindValue(":p6", escaped);
   query.bindValue(":limit", limit);
   if (!query.exec()) {
     qWarning() << "shinto: completeVisited failed:" << query.lastError().text();
@@ -138,7 +143,12 @@ QVector<HistoryStore::Suggestion> HistoryStore::completeVisited(const QString &p
   }
   while (query.next()) {
     const QString url = query.value(0).toString();
-    out.push_back({displayLabel(url), url});
+    // A search visit's `typed.q` is the human-readable form
+    // ("weather today"); anything else falls back to the URL-derived
+    // label -- most search-engine urls are the noisy one here, not most
+    // visits, so this is the exception, not the rule.
+    const QString typedQuery = query.value(1).toString();
+    out.push_back({typedQuery.isEmpty() ? displayLabel(url) : typedQuery, url});
   }
   return out;
 }

@@ -33,11 +33,15 @@ class HistoryStore : public QObject {
   void recordVisit(const QString &url, const QString &title);
 
   // Visited URLs (each url is a SQLite PRIMARY KEY, so already unique)
-  // whose host or title matches `prefix`, ranked by visit_count (most
-  // frequently visited first) -- the omnibox's "you've been here before"
-  // suggestions, as opposed to PopularDomains' baked-in popularity list.
-  // A prefix shorter than 2 characters returns nothing, matching
-  // PopularDomains::complete()'s threshold.
+  // whose host, title, or original typed query matches `prefix`, ranked
+  // by visit_count (most frequently visited first) -- the omnibox's
+  // "you've been here before" suggestions, as opposed to PopularDomains'
+  // baked-in popularity list. A visit that came from an omnibox search
+  // shows as the query text itself ("weather today"), not the search
+  // engine's own URL ("duckduckgo.com/?q=weather+today") -- recovered via
+  // a join against `typed` (see recordTyped()). A prefix shorter than 2
+  // characters returns nothing, matching PopularDomains::complete()'s
+  // threshold.
   QVector<Suggestion> completeVisited(const QString &prefix, int limit) const;
 
   // Removes one URL from visited history -- the omnibox suggestion
