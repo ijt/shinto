@@ -1,0 +1,41 @@
+# Maintainer: Isaac Turner <ijt@github>
+# AUR package for Omarchy's optional-browser path:
+#   omarchy-pkg-aur-add shinto-git
+# then `omarchy default browser shinto` (once Omarchy lists it).
+
+pkgname=shinto-git
+pkgver=0.1.0.r0.g51590a4
+pkgrel=1
+pkgdesc="Page viewer for Omarchy — one window, one page; Hyprland is the tab bar"
+arch=('x86_64')
+url="https://github.com/ijt/shinto"
+license=('MIT')
+depends=('qt6-base' 'qt6-webengine')
+makedepends=('git' 'cmake' 'ninja')
+provides=('shinto')
+conflicts=('shinto')
+install=shinto-git.install
+source=("git+https://github.com/ijt/shinto.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd shinto
+  # No release tags yet: 0.1.0.r<commits>.g<hash>
+  printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cmake -S shinto/app -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 shinto/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  # Optional Hyprland window rule for source-style installs; Omarchy PR
+  # should also tag `shinto` in default/hypr/apps/browser.lua.
+  install -Dm644 shinto/hypr.lua "$pkgdir/usr/share/shinto/hypr.lua"
+  install -Dm755 shinto/theme-set-hook.sh "$pkgdir/usr/share/shinto/theme-set-hook.sh"
+}

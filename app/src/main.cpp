@@ -90,6 +90,13 @@ int main(int argc, char *argv[]) {
     args << QString::fromLocal8Bit(argv[i]);
   }
 
+  // omarchy-launch-browser maps --private to --incognito/--inprivate and
+  // appends them before the URL. Shinto has no private profile yet, so drop
+  // the flags rather than treating them as a URL to open.
+  args.removeAll(QStringLiteral("--incognito"));
+  args.removeAll(QStringLiteral("--private"));
+  args.removeAll(QStringLiteral("--inprivate"));
+
   if (args.removeOne(QStringLiteral("--theme"))) {
     // `shinto theme` (the Omarchy theme-set hook): tell an already-running
     // daemon to re-read colors.toml and re-apply it live. A no-op if

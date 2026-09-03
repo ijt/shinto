@@ -37,10 +37,19 @@ require_bin() {
 
 install_desktop() {
   mkdir -p "$HOME/.local/share/applications"
-  cat >"$HOME/.local/share/applications/shinto.desktop" <<EOF
+  # Prefer the packaged desktop template when present; rewrite Exec/Icon for
+  # a source-tree install under ~/.local.
+  local template=$SCRIPT_DIR/packaging/shinto.desktop
+  if [[ -f $template ]]; then
+    sed -e "s|^Exec=shinto|Exec=$HOME/.local/bin/shinto|" \
+        -e "s|^Icon=shinto|Icon=$SCRIPT_DIR/app/resources/icon.png|" \
+        "$template" >"$HOME/.local/share/applications/shinto.desktop"
+  else
+    cat >"$HOME/.local/share/applications/shinto.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Shinto
+GenericName=Web Browser
 Comment=Page viewer for Omarchy — one window, one page
 Exec=$HOME/.local/bin/shinto %u
 Icon=$SCRIPT_DIR/app/resources/icon.png
@@ -50,6 +59,7 @@ MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme
 StartupNotify=false
 StartupWMClass=shinto
 EOF
+  fi
   command -v update-desktop-database >/dev/null &&
     update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
 }
@@ -275,9 +285,13 @@ case $cmd in
   status)
     systemctl --user status shinto.service --no-pager || true
     ;;
-  theme)
+  theme | --theme)
     require_bin
     exec "$BIN" --theme
+    ;;
+  --daemon)
+    require_bin
+    exec "$BIN" --daemon
     ;;
   default)
     install_default
@@ -285,6 +299,8 @@ case $cmd in
     ;;
   *)
     # omarchy-launch-browser maps --private to --incognito / --inprivate.
+    # The binary also strips these; drop them here so a lone --incognito is
+    # not rejected as an unknown flag by the wrapper.
     while [[ ${1:-} == --incognito || ${1:-} == --private || ${1:-} == --inprivate ]]; do
       shift
     done

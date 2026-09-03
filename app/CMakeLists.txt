@@ -32,4 +32,25 @@ target_link_libraries(shinto-bin PRIVATE
 )
 
 include(GNUInstallDirs)
-install(TARGETS shinto-bin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Packaged name is `shinto` (what desktop files and systemd ExecStart call).
+# The build tree keeps the target name shinto-bin so it does not collide with
+# the source-tree bash wrapper also named `shinto`.
+install(PROGRAMS $<TARGET_FILE:shinto-bin>
+  DESTINATION ${CMAKE_INSTALL_BINDIR}
+  RENAME shinto)
+
+set(_shinto_packaging_dir "${CMAKE_CURRENT_SOURCE_DIR}/../packaging")
+install(FILES "${_shinto_packaging_dir}/shinto.desktop"
+  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png"
+  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/128x128/apps
+  RENAME shinto.png)
+
+# systemd user unit: ExecStart must match the install prefix (/usr for
+# packages, /usr/local for a plain cmake --install).
+set(SHINTO_DAEMON_EXEC "${CMAKE_INSTALL_FULL_BINDIR}/shinto")
+configure_file("${_shinto_packaging_dir}/shinto.service.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/shinto.service" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/shinto.service"
+  DESTINATION "lib/systemd/user")

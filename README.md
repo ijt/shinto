@@ -8,26 +8,27 @@ A small native C++/Qt6 app embedding QtWebEngine (`app/`) — not a Chrome exten
 
 ## Why it starts fast
 
-The app itself is the warm daemon — no separate hidden window needed to keep it alive. `shinto.service` runs it with zero windows open; `Super + Shift + Return` asks the already-running process for a new window over a local socket. Warm opens measure well under 150ms, not seconds.
+The app itself is the warm daemon — no separate hidden window needed to keep it alive. `shinto.service` runs it with zero windows open; opening a page asks the already-running process for a new window over a local socket. Warm opens measure well under 150ms, not seconds.
 
-`Super + Shift + B` stays stock Chromium, so you still have an escape hatch.
+## What Shinto is (and is not)
+
+| Is | Is not |
+|----|--------|
+| Default *page* browser (links, Super+Shift+B once set) | Omarchy webapp host (`--app=` stays on Chromium) |
+| One window per page; Hyprland groups are tabs | An extension platform |
+| Theme-aware omnibox via Omarchy hooks | A full Chrome/Firefox replacement for every workflow |
+
+Chromium remains the right tool for Omarchy web apps and bundled Chromium extensions. Shinto is for reading the web on a tiling compositor.
 
 ## Install
 
-Omarchy / Hyprland.
-
-Build the app once:
-
-```bash
-cmake -S app -B app/build
-cmake --build app/build
-```
-
-Then:
+### From source (Omarchy / Hyprland)
 
 ```bash
 git clone https://github.com/ijt/shinto.git
 cd shinto
+cmake -S app -B app/build
+cmake --build app/build
 ./shinto install
 ```
 
@@ -42,6 +43,33 @@ That will:
 
 ```bash
 ./shinto uninstall   # data is left in ~/.local/share/shinto
+```
+
+### Packaged (AUR)
+
+A `shinto-git` PKGBUILD lives in [`packaging/`](packaging/). Build/install:
+
+```bash
+cd packaging
+makepkg -si
+systemctl --user enable --now shinto.service
+xdg-settings set default-web-browser shinto.desktop
+```
+
+Once Omarchy lists Shinto under *Install > Browser*, the intended path is:
+
+```bash
+omarchy install browser shinto
+omarchy default browser shinto
+```
+
+### System install layout (`cmake --install`)
+
+```
+/usr/bin/shinto
+/usr/share/applications/shinto.desktop
+/usr/share/icons/hicolor/128x128/apps/shinto.png
+/usr/lib/systemd/user/shinto.service
 ```
 
 ## Keys
@@ -68,4 +96,4 @@ Hyprland groups (these are the tabs):
 
 - Dedicated QtWebEngine profile at `~/.local/share/shinto/profile/webengine` — your main Chromium logins are untouched.
 - `Ctrl+N` / `Ctrl+T` open a new empty window. `Ctrl+L` edits the address in this window, whole address selected. Escape goes back. On the empty gate, Ctrl+L is a no-op.
-- `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG). `shinto default` points that at Shinto.
+- `Super + Shift + B` stays Omarchy's default-browser launcher (`omarchy-launch-browser` / XDG) until you run `shinto default` or `omarchy default browser shinto`.
