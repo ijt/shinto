@@ -13,6 +13,7 @@
 
 #include "BrowserWindow.h"
 #include "HistoryStore.h"
+#include "PopularDomains.h"
 #include "Shinto.h"
 #include "SingletonClient.h"
 #include "SingletonServer.h"
@@ -125,13 +126,14 @@ int main(int argc, char *argv[]) {
   if (!history.open()) {
     qWarning() << "shinto: continuing without persistent typed/visited history";
   }
+  const shinto::PopularDomains domains;
 
   shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette());
 
   shinto::SingletonServer server;
   QObject::connect(&server, &shinto::SingletonServer::openRequested,
-                    [profile, &history](const QString &openUrl) {
-                      shinto::BrowserWindow::spawn(profile, &history, openUrl);
+                    [profile, &history, &domains](const QString &openUrl) {
+                      shinto::BrowserWindow::spawn(profile, &history, &domains, openUrl);
                     });
   QObject::connect(&server, &shinto::SingletonServer::themeReloadRequested,
                     [] { shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette()); });
@@ -147,7 +149,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (!forceDaemon) {
-    shinto::BrowserWindow::spawn(profile, &history, url);
+    shinto::BrowserWindow::spawn(profile, &history, &domains, url);
   }
   // else: `--daemon` (the systemd unit) starts with zero windows, warm and
   // waiting for the first Super+Shift+Return handoff.

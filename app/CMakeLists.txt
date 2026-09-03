@@ -17,6 +17,7 @@ qt_add_executable(shinto-bin
   src/WebProfile.cpp
   src/ThemeLoader.cpp
   src/HistoryStore.cpp
+  src/PopularDomains.cpp
   src/OmniboxOverlay.cpp
   src/BrowserWindow.cpp
   src/SingletonServer.cpp

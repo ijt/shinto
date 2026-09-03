@@ -78,8 +78,8 @@ QVector<BrowserWindow *> BrowserWindow::instances_;
 Palette BrowserWindow::currentPalette_;
 
 BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *history,
-                                     const QString &url) {
-  auto *win = new BrowserWindow(profile, history, url);
+                                     const PopularDomains *domains, const QString &url) {
+  auto *win = new BrowserWindow(profile, history, domains, url);
   win->setAttribute(Qt::WA_DeleteOnClose);
   instances_.push_back(win);
   win->resize(1200, 800);
@@ -95,8 +95,8 @@ void BrowserWindow::applyPaletteToAll(const Palette &palette) {
 }
 
 BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
-                              const QString &url)
-    : history_(history) {
+                              const PopularDomains *domains, const QString &url)
+    : history_(history), domains_(domains) {
   setWindowTitle(QStringLiteral("Shinto"));
 
   auto *container = new QWidget(this);
@@ -104,7 +104,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
 
   webView_ = new WebView(profile, container);
 
-  overlay_ = new OmniboxOverlay(history_, container);
+  overlay_ = new OmniboxOverlay(history_, domains_, container);
   overlay_->applyPalette(currentPalette_);
 
   auto *layout = new QVBoxLayout(container);
@@ -115,6 +115,9 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
 
   connect(overlay_, &OmniboxOverlay::navigateRequested, this, &BrowserWindow::onOverlayNavigate);
   connect(overlay_, &OmniboxOverlay::cancelled, this, &BrowserWindow::onOverlayCancelled);
+  // The suggestion list grows/shrinks as you type; keep the editing bar
+  // sized to fit it instead of leaving it crushed into a fixed height.
+  connect(overlay_, &OmniboxOverlay::contentSizeChanged, this, &BrowserWindow::relayout);
 
   connect(webView_->page(), &QWebEnginePage::urlChanged, this, [this](const QUrl &navUrl) {
     history_->recordVisit(navUrl.toString(), webView_->page()->title());
@@ -130,7 +133,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   // detect and close a stray window after the fact.
   connect(webView_->page(), &QWebEnginePage::newWindowRequested, this,
           [this](QWebEngineNewWindowRequest &request) {
-            BrowserWindow::spawn(webView_->page()->profile(), history_,
+            BrowserWindow::spawn(webView_->page()->profile(), history_, domains_,
                                   request.requestedUrl().toString());
           });
 
@@ -207,7 +210,7 @@ void BrowserWindow::onOverlayCancelled() {
 }
 
 void BrowserWindow::onNewPageShortcut() {
-  BrowserWindow::spawn(webView_->page()->profile(), history_, QString());
+  BrowserWindow::spawn(webView_->page()->profile(), history_, domains_, QString());
 }
 
 void BrowserWindow::onEditAddressShortcut() {

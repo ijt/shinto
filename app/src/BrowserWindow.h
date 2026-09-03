@@ -10,6 +10,7 @@
 #include <QVector>
 
 #include "HistoryStore.h"
+#include "PopularDomains.h"
 #include "ThemeLoader.h"
 
 class QWebEngineProfile;
@@ -27,7 +28,7 @@ class BrowserWindow : public QMainWindow {
   // Creates, registers, shows, and returns a new window. `url` empty means
   // start in the empty-gate state; non-empty loads it immediately.
   static BrowserWindow *spawn(QWebEngineProfile *profile, HistoryStore *history,
-                               const QString &url);
+                               const PopularDomains *domains, const QString &url);
 
   // Re-applies a reloaded theme to every live window (the `shinto theme` /
   // Omarchy theme-set-hook path, delivered over the singleton socket).
@@ -41,7 +42,8 @@ class BrowserWindow : public QMainWindow {
  private:
   enum class State { Empty, Loaded, Editing };
 
-  BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, const QString &url);
+  BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, const PopularDomains *domains,
+                const QString &url);
 
   void relayout();
   void enterEmpty();
@@ -52,6 +54,7 @@ class BrowserWindow : public QMainWindow {
   void onEditAddressShortcut();
 
   HistoryStore *history_;
+  const PopularDomains *domains_;
   WebView *webView_;
   OmniboxOverlay *overlay_;
   State state_ = State::Empty;
