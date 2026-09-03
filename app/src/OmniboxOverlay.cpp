@@ -66,8 +66,8 @@ void OmniboxOverlay::applyPalette(const Palette &palette) {
   input_->setPalette(pal);
 }
 
-void OmniboxOverlay::showGate() {
-  input_->clear();
+void OmniboxOverlay::showGate(const QString &prefill) {
+  input_->setText(prefill);
   clearSuggestions();
   progress_ = 0;
   progressBar_->hide();
@@ -76,6 +76,9 @@ void OmniboxOverlay::showGate() {
   show();
   raise();
   input_->setFocus();
+  if (!prefill.isEmpty()) {
+    input_->selectAll();
+  }
 }
 
 void OmniboxOverlay::hideOverlay() {

@@ -33,9 +33,12 @@ class OmniboxOverlay : public QWidget {
 
   void applyPalette(const Palette &palette);
 
-  // Shows the gate: clears the input, focuses it. BrowserWindow always
-  // gives this widget the full window area before calling this.
-  void showGate();
+  // Shows the gate, focuses it. `prefill` empty means a blank gate (a
+  // fresh window); non-empty (Ctrl+L on a loaded page) fills the input
+  // with it, fully selected, so typing replaces it but Enter alone just
+  // re-submits the current address. BrowserWindow always gives this
+  // widget the full window area before calling this.
+  void showGate(const QString &prefill = QString());
 
   // Hides without navigating anywhere -- what Escape does.
   void hideOverlay();

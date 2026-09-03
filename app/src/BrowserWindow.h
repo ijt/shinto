@@ -1,11 +1,12 @@
 // One window = one page (matching Shinto's long-standing philosophy).
 // Owns a QWebEngineView and an OmniboxOverlay, and is its own state
-// machine: Empty (fresh window, gate shown, nothing loaded yet) <-> Loaded
-// (gate hidden, page visible) <-> Gate (Ctrl+L on a loaded page shows the
-// same blank gate on top of it, rather than a prefilled address bar --
-// Escape reverts to Loaded; the empty window's Empty state has nothing to
-// revert to, so Ctrl+L there is a no-op). There is no separate "gate
-// window" type -- see the plan's "Window/overlay model" section.
+// machine: Empty (fresh window, blank gate shown, nothing loaded yet) <->
+// Loaded (gate hidden, page visible) <-> Gate (Ctrl+L on a loaded page
+// shows the same gate on top of it, prefilled with the current URL and
+// fully selected -- Escape reverts to Loaded; the empty window's Empty
+// state has nothing to revert to, so Ctrl+L there is a no-op). There is
+// no separate "gate window" type -- see the plan's "Window/overlay model"
+// section.
 #pragma once
 
 #include <QMainWindow>

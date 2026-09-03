@@ -190,7 +190,7 @@ void BrowserWindow::enterEmpty() {
 void BrowserWindow::showGateOverPage() {
   state_ = State::Gate;
   relayout();
-  overlay_->showGate();
+  overlay_->showGate(webView_->url().toString());
 }
 
 void BrowserWindow::onOverlayNavigate(const QString &url) {
