@@ -5,6 +5,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QResizeEvent>
+#include <QSignalBlocker>
 
 namespace shinto {
 
@@ -129,6 +130,12 @@ void OmniboxOverlay::moveSelection(int delta) {
 void OmniboxOverlay::applySelectionToInput() {
   const int row = list_->currentRow();
   if (row < 0 || row >= items_.size()) return;
+  // setText() fires textChanged, which is wired to updateSuggestions() --
+  // without blocking it here, applying a selection would immediately
+  // re-query suggestions using the just-selected text as the new prefix,
+  // regenerating (and likely shrinking) the very list being cycled
+  // through on every Tab/Up/Down press.
+  const QSignalBlocker blocker(input_);
   input_->setText(items_[row].label);
   input_->setCursorPosition(input_->text().length());
 }
