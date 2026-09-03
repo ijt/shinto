@@ -177,6 +177,20 @@ bool OmniboxOverlay::eventFilter(QObject *obj, QEvent *event) {
     if (mouseEvent->button() == Qt::LeftButton) {
       const QVariant urlProp = obj->property("suggestionUrl");
       if (urlProp.isValid()) {
+        // Match what Tab/arrow-selecting a suggestion already does
+        // (applySelectionToInput()) -- without this, the input keeps
+        // showing whatever was typed, and the shimmer plays on that
+        // stale text instead of what's actually about to load. Blocked
+        // for the same reason applySelectionToInput() blocks it: setText()
+        // fires textChanged -> updateSuggestions() -> rebuilds this very
+        // list (and deletes `obj`, the row this event was delivered to)
+        // synchronously, before navigateTo() below gets a chance to.
+        const QVariant labelProp = obj->property("suggestionLabel");
+        if (labelProp.isValid()) {
+          const QSignalBlocker blocker(input_);
+          input_->setText(labelProp.toString());
+          input_->setCursorPosition(input_->text().length());
+        }
         navigateTo(urlProp.toString(), QString());
         return true;
       }
@@ -399,8 +413,10 @@ void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
 
     // Clicking anywhere else on the row (not the dismiss button) navigates
     // there directly, same destination Tab-selecting it and pressing
-    // Enter would reach.
+    // Enter would reach. suggestionLabel lets the click handler update
+    // the input to match, same as Tab/arrow-selecting it already does.
     row->setProperty("suggestionUrl", url);
+    row->setProperty("suggestionLabel", item.label);
     row->installEventFilter(this);
 
     list_->setItemWidget(listItem, row);
