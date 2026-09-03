@@ -13,7 +13,11 @@ struct Palette {
   QString accent = QStringLiteral("#7aa2f7");
   QString muted = QStringLiteral("#565f89");
   QString card = QStringLiteral("#24283b");
-  // Not read from colors.toml (the old theme.css hardcoded this too).
+  // Not from colors.toml -- fonts aren't a per-theme thing in Omarchy, they're
+  // a separate system-wide choice (`omarchy-font-set`). This default is the
+  // last-resort fallback (both if fontconfig has nothing to say and as the
+  // tail of the QSS font-family chain either way); loadPalette() normally
+  // prepends the live-resolved system monospace font ahead of it.
   QString font = QStringLiteral(
       "'JetBrainsMono Nerd Font','JetBrains Mono',ui-monospace,monospace");
 
@@ -22,9 +26,11 @@ struct Palette {
 };
 
 // Reads ~/.local/state/omarchy/current/theme/colors.toml (via
-// shinto::colorsTomlPath()). Missing keys, or a missing file entirely, fall
-// back to Palette's defaults above -- same behavior as the old bash
-// `toml_color`.
+// shinto::colorsTomlPath()) for colors, and resolves the live system
+// monospace font (see resolveMonospaceFont() in the .cpp) for the font.
+// Missing colors.toml keys, a missing file entirely, or no resolvable font
+// all fall back to Palette's defaults above -- same behavior as the old
+// bash `toml_color`, extended to the font.
 Palette loadPalette();
 
 }  // namespace shinto

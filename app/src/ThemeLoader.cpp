@@ -1,6 +1,8 @@
 #include "ThemeLoader.h"
 
 #include <QFile>
+#include <QFont>
+#include <QFontInfo>
 #include <QHash>
 #include <QTextStream>
 
@@ -9,6 +11,22 @@
 namespace shinto {
 
 namespace {
+
+// Omarchy's `omarchy-font-set` writes ~/.config/fontconfig/fonts.conf
+// aliasing the literal family name "monospace" to whatever font the user
+// picked -- its own comment on that file says plainly: "fontconfig is the
+// canonical source of truth -- the omarchy shell, Qt apps, and anything
+// resolving 'monospace' all read from here." Asking Qt to resolve that
+// same family name (confirmed: matches `fc-match monospace`) picks up the
+// live choice, Omarchy or not -- a vanilla Linux system's fontconfig still
+// resolves "monospace" to *something* reasonable, just not one Omarchy
+// picked. An empty result (no fontconfig at all, somehow) falls back to
+// Palette's own hardcoded default entirely.
+QString resolveMonospaceFont() {
+  QFont font(QStringLiteral("monospace"));
+  font.setStyleHint(QFont::Monospace);
+  return QFontInfo(font).family();
+}
 
 // colors.toml is flat `key = "value"` lines (confirmed against a live
 // Omarchy theme file) -- no need for a real TOML parser.
@@ -56,6 +74,15 @@ Palette loadPalette() {
   palette.accent = pick(toml, "accent", palette.accent);
   palette.muted = pick(toml, "dark_foreground", palette.muted);
   palette.card = pick(toml, "lighter_background", palette.card);
+
+  const QString resolvedFont = resolveMonospaceFont();
+  if (!resolvedFont.isEmpty()) {
+    // Prepended, not replaced -- if the resolved name somehow can't
+    // actually be used (a quoting edge case, a font that vanished between
+    // resolution and paint), QSS's own font-family fallback chain still
+    // has something to land on.
+    palette.font = QStringLiteral("'%1',%2").arg(resolvedFont, palette.font);
+  }
   return palette;
 }
 
