@@ -56,17 +56,23 @@ FindBar::FindBar(QWidget *parent) : QWidget(parent) {
 }
 
 void FindBar::applyPalette(const Palette &palette) {
+  // QString::arg() binds sequentially to the *lowest-numbered placeholder
+  // actually present in the string* -- not literally %1 -- so a template
+  // that never uses %1 silently shifts every argument down one slot
+  // (confirmed: this used to start at %2, and every color came out wrong,
+  // with the font dropped entirely). Numbering from %1 with one argument
+  // per placeholder used avoids the whole class of bug.
   setStyleSheet(QStringLiteral(
-                    "#FindBar { background: %2; border: 1px solid %4; border-radius: 4px; }"
+                    "#FindBar { background: %1; border: 1px solid %3; border-radius: 4px; }"
                     "#FindBar QLineEdit {"
-                    " background: transparent; color: %3; border: none;"
-                    " font-family: %5; font-size: 13px; }"
-                    "#FindBar #FindBarCount { color: %4; font-family: %5; font-size: 12px; }"
+                    " background: transparent; color: %2; border: none;"
+                    " font-family: %4; font-size: 13px; }"
+                    "#FindBar #FindBarCount { color: %3; font-family: %4; font-size: 12px; }"
                     "#FindBar #FindBarButton {"
-                    " color: %4; background: transparent; border: none; font-family: %5; }"
-                    "#FindBar #FindBarButton:hover { color: %3; }"
-                    "#FindBar #FindBarButton:disabled { color: %4; }")
-                    .arg(palette.bg, palette.card, palette.fg, palette.muted, palette.font));
+                    " color: %3; background: transparent; border: none; font-family: %4; }"
+                    "#FindBar #FindBarButton:hover { color: %2; }"
+                    "#FindBar #FindBarButton:disabled { color: %3; }")
+                    .arg(palette.card, palette.fg, palette.muted, palette.font));
 }
 
 void FindBar::showBar() {
