@@ -17,8 +17,10 @@
 #include "PopularDomains.h"
 #include "ThemeLoader.h"
 
+class QGraphicsOpacityEffect;
 class QLineEdit;
 class QListWidget;
+class QPropertyAnimation;
 class QResizeEvent;
 
 namespace shinto {
@@ -64,12 +66,16 @@ class OmniboxOverlay : public QWidget {
   void moveSelection(int delta);
   void applySelectionToInput();
   int suggestionListHeight() const;
+  void startShimmer();
+  void stopShimmer();
 
   HistoryStore *history_;
   const PopularDomains *domains_;
   QLineEdit *input_;
   QListWidget *list_;
   QWidget *progressBar_;
+  QGraphicsOpacityEffect *inputOpacity_;
+  QPropertyAnimation *shimmer_;
   int progress_ = 0;
   QVector<PopularDomains::Suggestion> items_;
 };

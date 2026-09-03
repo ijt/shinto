@@ -1,9 +1,11 @@
 #include "OmniboxOverlay.h"
 
 #include <QEvent>
+#include <QGraphicsOpacityEffect>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPropertyAnimation>
 #include <QResizeEvent>
 #include <QSignalBlocker>
 
@@ -40,6 +42,21 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *doma
   progressBar_->setObjectName(QStringLiteral("ProgressBar"));
   progressBar_->hide();
   // No QLayout -- position is managed by hand in layoutInput().
+
+  // Loading a real page has some inherent latency (DNS, connect, TLS)
+  // before Chromium reports the first loadProgress tick -- the shimmer is
+  // immediate feedback for that gap, submitted at the exact moment Enter
+  // is pressed, independent of the network. setProgress() takes over and
+  // stops it once real progress data arrives.
+  inputOpacity_ = new QGraphicsOpacityEffect(input_);
+  inputOpacity_->setOpacity(1.0);
+  input_->setGraphicsEffect(inputOpacity_);
+  shimmer_ = new QPropertyAnimation(inputOpacity_, "opacity", this);
+  shimmer_->setDuration(700);
+  shimmer_->setStartValue(1.0);
+  shimmer_->setKeyValueAt(0.5, 0.35);
+  shimmer_->setEndValue(1.0);
+  shimmer_->setLoopCount(-1);
 }
 
 void OmniboxOverlay::applyPalette(const Palette &palette) {
@@ -54,6 +71,7 @@ void OmniboxOverlay::showGate() {
   clearSuggestions();
   progress_ = 0;
   progressBar_->hide();
+  stopShimmer();
   layoutInput();
   show();
   raise();
@@ -62,13 +80,27 @@ void OmniboxOverlay::showGate() {
 
 void OmniboxOverlay::hideOverlay() {
   clearSuggestions();
+  stopShimmer();
   hide();
 }
 
 void OmniboxOverlay::setProgress(int percent) {
   progress_ = qBound(0, percent, 100);
+  // Real progress data has arrived -- the progress bar takes over as
+  // feedback from here.
+  if (progress_ > 0) stopShimmer();
   progressBar_->setVisible(progress_ > 0 && progress_ < 100 && isVisible());
   layoutProgressBar();
+}
+
+void OmniboxOverlay::startShimmer() {
+  inputOpacity_->setOpacity(1.0);
+  shimmer_->start();
+}
+
+void OmniboxOverlay::stopShimmer() {
+  shimmer_->stop();
+  inputOpacity_->setOpacity(1.0);
 }
 
 void OmniboxOverlay::resizeEvent(QResizeEvent *event) {
@@ -165,6 +197,7 @@ void OmniboxOverlay::submit() {
   if (url.isEmpty()) return;
   history_->recordTyped(input_->text(), url);
   clearSuggestions();
+  startShimmer();
   emit navigateRequested(url);
 }
 
