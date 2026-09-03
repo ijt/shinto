@@ -5,8 +5,6 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QResizeEvent>
-#include <QStyle>
-#include <QTimer>
 
 namespace shinto {
 
@@ -36,8 +34,7 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *doma
   list_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   list_->hide();
-  // No QLayout -- position is managed by hand in layoutInput(), since the
-  // two modes place things too differently for one shared layout.
+  // No QLayout -- position is managed by hand in layoutInput().
 }
 
 void OmniboxOverlay::applyPalette(const Palette &palette) {
@@ -47,35 +44,13 @@ void OmniboxOverlay::applyPalette(const Palette &palette) {
   input_->setPalette(pal);
 }
 
-void OmniboxOverlay::showEmpty() {
-  emptyMode_ = true;
-  input_->setProperty("emptyMode", true);
-  input_->style()->unpolish(input_);
-  input_->style()->polish(input_);
+void OmniboxOverlay::showGate() {
   input_->clear();
   clearSuggestions();
   layoutInput();
   show();
   raise();
   input_->setFocus();
-}
-
-void OmniboxOverlay::showEditing(const QString &currentUrl) {
-  emptyMode_ = false;
-  input_->setProperty("emptyMode", false);
-  input_->style()->unpolish(input_);
-  input_->style()->polish(input_);
-  input_->setText(currentUrl);
-  clearSuggestions();
-  layoutInput();
-  show();
-  raise();
-  input_->setFocus();
-  // Standard browser Ctrl+L behavior: select the whole address, so typing
-  // immediately replaces it. A freshly-shown/focused QLineEdit can reset
-  // the selection once more on the next event loop turn, so re-assert it.
-  input_->selectAll();
-  QTimer::singleShot(0, input_, &QLineEdit::selectAll);
 }
 
 void OmniboxOverlay::hideOverlay() {
@@ -95,23 +70,12 @@ int OmniboxOverlay::suggestionListHeight() const {
 }
 
 void OmniboxOverlay::layoutInput() {
+  // Just a caret at the top-left -- a modest fixed width to type into, not
+  // the full window. Suggestions drop down below it.
   const int h = input_->sizeHint().height();
-  const int listH = suggestionListHeight();
-
-  if (emptyMode_) {
-    // Just a caret at the top-left -- a modest fixed width to type into,
-    // not the full window. Suggestions drop down below it.
-    const int w = qMin(kEmptyInputWidth, qMax(0, width() - 2 * kMargin));
-    input_->setGeometry(kMargin, kMargin, w, h);
-    list_->setGeometry(kMargin, kMargin + h + 4, w, listH);
-  } else {
-    const int w = qMax(0, width() - 2 * kMargin);
-    const int inputY = qMax(kMargin, height() - kMargin - h);
-    input_->setGeometry(kMargin, inputY, w, h);
-    // Suggestions open upward from the bottom-anchored bar, so they stay
-    // on screen.
-    list_->setGeometry(kMargin, qMax(0, inputY - listH - 4), w, listH);
-  }
+  const int w = qMin(kEmptyInputWidth, qMax(0, width() - 2 * kMargin));
+  input_->setGeometry(kMargin, kMargin, w, h);
+  list_->setGeometry(kMargin, kMargin + h + 4, w, suggestionListHeight());
   list_->setVisible(!items_.isEmpty());
 }
 
@@ -190,21 +154,12 @@ void OmniboxOverlay::renderSuggestions(const QVector<PopularDomains::Suggestion>
     list_->addItem(item.label);
   }
   layoutInput();
-  emit contentSizeChanged();
 }
 
 void OmniboxOverlay::clearSuggestions() {
   items_.clear();
   list_->clear();
   list_->hide();
-  emit contentSizeChanged();
-}
-
-int OmniboxOverlay::preferredEditingHeight() const {
-  int h = 2 * kMargin + input_->sizeHint().height();
-  const int listH = suggestionListHeight();
-  if (listH > 0) h += listH + 4;
-  return h;
 }
 
 }  // namespace shinto

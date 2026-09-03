@@ -1,9 +1,11 @@
 // One window = one page (matching Shinto's long-standing philosophy).
-// Owns a QWebEngineView and an OmniboxOverlay, and is its own state machine:
-// Empty (fresh window, overlay full-screen, nothing loaded yet) <-> Loaded
-// (overlay hidden, page visible) <-> Editing (overlay is a thin bar over the
-// still-visible page). There is no separate "gate window" type anymore --
-// see the plan's "Window/overlay model" section.
+// Owns a QWebEngineView and an OmniboxOverlay, and is its own state
+// machine: Empty (fresh window, gate shown, nothing loaded yet) <-> Loaded
+// (gate hidden, page visible) <-> Gate (Ctrl+L on a loaded page shows the
+// same blank gate on top of it, rather than a prefilled address bar --
+// Escape reverts to Loaded; the empty window's Empty state has nothing to
+// revert to, so Ctrl+L there is a no-op). There is no separate "gate
+// window" type -- see the plan's "Window/overlay model" section.
 #pragma once
 
 #include <QMainWindow>
@@ -40,14 +42,14 @@ class BrowserWindow : public QMainWindow {
   void resizeEvent(QResizeEvent *event) override;
 
  private:
-  enum class State { Empty, Loaded, Editing };
+  enum class State { Empty, Loaded, Gate };
 
   BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, const PopularDomains *domains,
                 const QString &url);
 
   void relayout();
   void enterEmpty();
-  void enterEditing();
+  void showGateOverPage();
   void onOverlayNavigate(const QString &url);
   void onOverlayCancelled();
   void onNewPageShortcut();

@@ -62,16 +62,17 @@ Palette loadPalette() {
 QString Palette::toQss() const {
   return QStringLiteral(
              "#OmniboxOverlay { background: %1; }\n"
+             // No visible field at rest -- just the caret. Same style
+             // whether it's a fresh window's gate or Ctrl+L on a loaded
+             // page (both show this same gate now).
              "#OmniboxOverlay QLineEdit {"
              " background: transparent; color: #ffffff; border: none;"
-             " border-bottom: 2px solid %4; border-radius: 0; padding: 8px 4px;"
-             " font-family: %5; font-size: 15px; selection-background-color: %6; }\n"
-             "#OmniboxOverlay QLineEdit:focus { border-bottom: 2px solid %6; }\n"
-             // Empty gate: no visible field at all, just the caret --
-             // border-bottom overridden back off, no focus outline either.
-             "#OmniboxOverlay QLineEdit[emptyMode=\"true\"],"
-             "#OmniboxOverlay QLineEdit[emptyMode=\"true\"]:focus {"
-             " border-bottom: none; padding: 0; }\n")
+             " padding: 0; font-family: %5; font-size: 15px;"
+             " selection-background-color: %6; }\n"
+             "#OmniboxOverlay QListWidget {"
+             " background: %2; color: %3; border: 1px solid %4;"
+             " font-family: %5; outline: none; }\n"
+             "#OmniboxOverlay QListWidget::item:selected { background: %6; color: %2; }\n")
       .arg(bg, card, fg, muted, font, accent);
 }
 

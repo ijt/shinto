@@ -115,9 +115,6 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
 
   connect(overlay_, &OmniboxOverlay::navigateRequested, this, &BrowserWindow::onOverlayNavigate);
   connect(overlay_, &OmniboxOverlay::cancelled, this, &BrowserWindow::onOverlayCancelled);
-  // The suggestion list grows/shrinks as you type; keep the editing bar
-  // sized to fit it instead of leaving it crushed into a fixed height.
-  connect(overlay_, &OmniboxOverlay::contentSizeChanged, this, &BrowserWindow::relayout);
 
   connect(webView_->page(), &QWebEnginePage::urlChanged, this, [this](const QUrl &navUrl) {
     history_->recordVisit(navUrl.toString(), webView_->page()->title());
@@ -165,12 +162,10 @@ void BrowserWindow::resizeEvent(QResizeEvent *event) {
 }
 
 void BrowserWindow::relayout() {
-  const QRect area = centralWidget()->rect();
-  if (state_ == State::Empty) {
-    overlay_->setGeometry(area);
-  } else if (state_ == State::Editing) {
-    const int barHeight = qMin(area.height(), overlay_->preferredEditingHeight());
-    overlay_->setGeometry(0, area.height() - barHeight, area.width(), barHeight);
+  // Both Empty and Gate show the same full-window gate; Loaded shows none
+  // (webView_ already fills the container via its own layout).
+  if (state_ != State::Loaded) {
+    overlay_->setGeometry(centralWidget()->rect());
   }
 }
 
@@ -183,15 +178,15 @@ void BrowserWindow::enterEmpty() {
   // caused via isolated testing: reproduced with a bare idle
   // QWebEngineView, gone once it was given something, anything, to load).
   // about:blank gives the compositor a real frame to commit while still
-  // looking empty -- the omnibox fully covers it either way.
+  // looking empty -- the gate fully covers it either way.
   webView_->setUrl(QUrl(QStringLiteral("about:blank")));
-  overlay_->showEmpty();
+  overlay_->showGate();
 }
 
-void BrowserWindow::enterEditing() {
-  state_ = State::Editing;
+void BrowserWindow::showGateOverPage() {
+  state_ = State::Gate;
   relayout();
-  overlay_->showEditing(webView_->url().toString());
+  overlay_->showGate();
 }
 
 void BrowserWindow::onOverlayNavigate(const QString &url) {
@@ -203,7 +198,7 @@ void BrowserWindow::onOverlayNavigate(const QString &url) {
 
 void BrowserWindow::onOverlayCancelled() {
   // A no-op on the empty gate: there is nothing loaded to go back to.
-  if (state_ != State::Editing) return;
+  if (state_ != State::Gate) return;
   state_ = State::Loaded;
   overlay_->hideOverlay();
   webView_->setFocus();
@@ -215,7 +210,7 @@ void BrowserWindow::onNewPageShortcut() {
 
 void BrowserWindow::onEditAddressShortcut() {
   if (state_ == State::Empty) return;  // documented no-op on the empty gate
-  enterEditing();
+  showGateOverPage();
 }
 
 }  // namespace shinto
