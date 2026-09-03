@@ -27,11 +27,14 @@ import argparse
 import concurrent.futures
 import json
 import os
+import re
 import sys
 import time
 from urllib.parse import urlparse
 
 import requests
+
+TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 # Hosts that serve parking/marketplace pages -- if any hop in a domain's
 # redirect chain lands on one of these, it's for sale/parked, full stop,
@@ -61,6 +64,28 @@ CONTENT_SIGNATURES = [
     "sedoparking.com", "parkingcrew.net", "cdn.parkingcrew",
     "bodis.com", "d38psrni17bvxu.cloudfront.net",  # Sedo's asset CDN
     "hugedomains.com", "dan.com/name/",
+]
+
+# A different failure mode from "parked for sale": the site owner shut the
+# service down and put up their own explanation, often hosted elsewhere
+# (a redirect to a Notion page, a static status page, etc.) -- confirmed
+# concretely: funkyimg.com redirects to a Notion page titled "FunkyIMG is
+# DOWN". Checked against the page <title> specifically, not the full body
+# -- titles are short and intentional, so a broader keyword list is safe
+# there in a way it wouldn't be scanning 20000 characters of body text.
+SHUTDOWN_TITLE_KEYWORDS = [
+    "is down", "is closed", "shut down", "shutting down", "discontinued",
+    "no longer available", "no longer in service", "no longer active",
+    "service has ended", "has been retired", "is no longer",
+]
+# The same idea, but specific enough multi-word phrases to check the full
+# body safely too (a title match alone won't catch a shutdown notice
+# with a generic <title>, e.g. just "Notion").
+SHUTDOWN_CONTENT_SIGNATURES = [
+    "is no longer available", "no longer in operation",
+    "we have discontinued", "service is no longer",
+    "this website is no longer", "this service has been discontinued",
+    "we're no longer accepting", "has permanently closed",
 ]
 
 TIMEOUT = 6
@@ -102,15 +127,40 @@ def check_domain(domain):
     # entirely).
     hop_urls = [r.url for r in resp.history] + [resp.url]
     for hop_url in hop_urls:
-        host = urlparse(hop_url).hostname or ""
+        parsed_hop = urlparse(hop_url)
+        host = parsed_hop.hostname or ""
         for parking_domain in PARKING_REDIRECT_DOMAINS:
             if host == parking_domain or host.endswith("." + parking_domain):
                 return {"domain": domain, "status": "parked", "reason": f"redirected through {host}"}
 
-    text = resp.text[:20000].lower() if resp.text else ""
+        # A redirect's URL *path* can carry the shutdown message even when
+        # the page's own <title> doesn't (confirmed: funkyimg.com ->
+        # notion.site/FunkyIMG-is-DOWN-<id> -- Notion is a JS-rendered SPA,
+        # so the raw HTML's <title> is just "Notion"; the actual message
+        # only exists in the URL slug, or after JS runs, which this script
+        # deliberately never does -- no headless-browser dependency).
+        path_words = parsed_hop.path.replace("-", " ").replace("_", " ").lower()
+        for kw in SHUTDOWN_TITLE_KEYWORDS:
+            if kw in path_words:
+                return {"domain": domain, "status": "shutdown",
+                        "reason": f"redirect path suggests shutdown ({kw!r}): {parsed_hop.path[:150]!r}"}
+
+    raw = resp.text[:20000] if resp.text else ""
+    text = raw.lower()
+
+    title_match = TITLE_RE.search(raw[:5000])
+    title = title_match.group(1).lower() if title_match else ""
+    for kw in SHUTDOWN_TITLE_KEYWORDS:
+        if kw in title:
+            return {"domain": domain, "status": "shutdown",
+                    "reason": f"page title suggests shutdown ({kw!r}): {title.strip()[:150]!r}"}
+
     for sig in CONTENT_SIGNATURES:
         if sig in text:
             return {"domain": domain, "status": "parked", "reason": f"content signature: {sig!r}"}
+    for sig in SHUTDOWN_CONTENT_SIGNATURES:
+        if sig in text:
+            return {"domain": domain, "status": "shutdown", "reason": f"content signature: {sig!r}"}
 
     return {"domain": domain, "status": "ok"}
 
@@ -120,7 +170,14 @@ def main():
     ap.add_argument("--input", default="app/resources/top100k-domains.txt")
     ap.add_argument("--report", default="scripts/parked-domain-report.jsonl")
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--workers", type=int, default=64)
+    # Confirmed concretely: at 30-100 workers, plainly-fine popular sites
+    # (wordpress.org, play.google.com, googletagmanager.com) started
+    # coming back as connection errors -- not real failures (a single
+    # request to each succeeded immediately after), but this machine's
+    # network stack (DNS resolution queueing, most likely) buckling under
+    # that many concurrent distinct-host lookups. 20 held up clean against
+    # the same domains in the same run.
+    ap.add_argument("--workers", type=int, default=20)
     ap.add_argument("--resume", action="store_true")
     args = ap.parse_args()
 
