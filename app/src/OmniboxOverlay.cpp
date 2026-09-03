@@ -17,7 +17,6 @@ namespace shinto {
 
 namespace {
 constexpr int kMargin = 24;
-constexpr int kEmptyInputWidth = 280;
 constexpr int kMaxSuggestions = 7;
 // Leaves at least 3 slots for PopularDomains fallback suggestions even
 // when history has plenty of matches -- history is more relevant when it
@@ -129,10 +128,12 @@ int OmniboxOverlay::suggestionListHeight() const {
 }
 
 void OmniboxOverlay::layoutInput() {
-  // Just a caret at the top-left -- a modest fixed width to type into, not
-  // the full window. Suggestions drop down below it.
+  // Full window width (minus margins) to type into -- was capped at a
+  // modest fixed width, which made a long URL or search query scroll
+  // inside a narrow field instead of just being visible. Suggestions drop
+  // down below it, matching this same width.
   const int h = input_->sizeHint().height();
-  const int w = qMin(kEmptyInputWidth, qMax(0, width() - 2 * kMargin));
+  const int w = qMax(0, width() - 2 * kMargin);
   input_->setGeometry(kMargin, kMargin, w, h);
   list_->setGeometry(kMargin, kMargin + h + 4, w, suggestionListHeight());
   list_->setVisible(!items_.isEmpty());
