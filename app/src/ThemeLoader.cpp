@@ -73,6 +73,16 @@ QString Palette::toQss() const {
              " background: %2; color: %3; border: 1px solid %4;"
              " font-family: %5; outline: none; }\n"
              "#OmniboxOverlay QListWidget::item:selected { background: %6; color: %2; }\n"
+             // History suggestion rows (SuggestionRow/SuggestionLabel/
+             // SuggestionDismiss): a real child widget per row, not plain
+             // item text (see OmniboxOverlay::renderSuggestions) -- keep it
+             // transparent so QListWidget's own selection highlight above
+             // still shows through, and match the label to plain items.
+             "#OmniboxOverlay #SuggestionRow { background: transparent; }\n"
+             "#OmniboxOverlay #SuggestionLabel { color: %3; font-family: %5; background: transparent; }\n"
+             "#OmniboxOverlay #SuggestionDismiss {"
+             " color: %4; background: transparent; border: none; font-family: %5; }\n"
+             "#OmniboxOverlay #SuggestionDismiss:hover { color: %3; }\n"
              "#OmniboxOverlay #ProgressBar { background: %6; border: none; }\n")
       .arg(bg, card, fg, muted, font, accent);
 }

@@ -3,8 +3,12 @@
 // field at rest -- used both for a fresh window's empty gate and for
 // Ctrl+L on an already-loaded page (which shows this same blank gate over
 // the still-loaded page, rather than a prefilled address bar). A dropdown
-// of offline domain-prefix suggestions (PopularDomains) appears below the
-// input as you type; nothing typed ever leaves the machine to power it.
+// appears below the input as you type, blending two sources: the user's
+// own visited history (HistoryStore::completeVisited(), ranked by visit
+// frequency, dismissible per-row via an "x" button since it's personal
+// data) filling first, then offline domain-prefix suggestions
+// (PopularDomains) filling whatever room is left. Nothing typed ever
+// leaves the machine to power either.
 //
 // This is never a navigable URL -- Escape simply hides it, since the
 // underlying page (if any) was never touched.
@@ -63,28 +67,43 @@ class OmniboxOverlay : public QWidget {
   void resizeEvent(QResizeEvent *event) override;
 
  private:
+  enum class SuggestionKind { History, Popular };
+  struct Suggestion {
+    QString label;
+    QString url;
+    SuggestionKind kind;
+  };
+
   void submit();
   void layoutInput();
   void layoutProgressBar();
   void updateSuggestions();
-  void renderSuggestions(const QVector<PopularDomains::Suggestion> &items);
+  void renderSuggestions(const QVector<Suggestion> &items);
   void clearSuggestions();
   void moveSelection(int delta);
   void applySelectionToInput();
   int suggestionListHeight() const;
   void startShimmer();
   void stopShimmer();
+  // The suggestion dropdown's per-row "x" button on a History-kind entry --
+  // forgets it (permanently, from HistoryStore) and refreshes the list.
+  void dismissHistorySuggestion(const QString &url);
+  // A History row's label is a real QLabel, not item text -- QListWidget's
+  // own `::item:selected` QSS color override never reaches it, so this
+  // mirrors that override by hand on whichever row is currentRow().
+  void updateSuggestionSelectionStyle();
 
   HistoryStore *history_;
   const PopularDomains *domains_;
   const ShintoConfig *config_;
+  Palette currentPalette_;
   QLineEdit *input_;
   QListWidget *list_;
   QWidget *progressBar_;
   QGraphicsOpacityEffect *inputOpacity_;
   QPropertyAnimation *shimmer_;
   int progress_ = 0;
-  QVector<PopularDomains::Suggestion> items_;
+  QVector<Suggestion> items_;
 };
 
 }  // namespace shinto

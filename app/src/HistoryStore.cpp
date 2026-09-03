@@ -11,6 +11,31 @@
 
 namespace shinto {
 
+namespace {
+
+// Mirrors PopularDomains::Suggestion's bare-domain label, but a visited URL
+// can carry a path -- strip the scheme and a leading "www." and keep the
+// rest, e.g. "https://www.github.com/ijt/shinto" -> "github.com/ijt/shinto".
+QString displayLabel(const QString &url) {
+  static const QRegularExpression kSchemeAndWww(
+      QStringLiteral("^[a-zA-Z][a-zA-Z0-9+.-]*://(www\\.)?"));
+  QString label = url;
+  label.remove(kSchemeAndWww);
+  return label;
+}
+
+// Escapes a LIKE pattern's own wildcard characters so the user's prefix is
+// matched literally, not interpreted as SQL wildcards.
+QString escapeLike(const QString &raw) {
+  QString out = raw;
+  out.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+  out.replace(QLatin1Char('%'), QStringLiteral("\\%"));
+  out.replace(QLatin1Char('_'), QStringLiteral("\\_"));
+  return out;
+}
+
+}  // namespace
+
 HistoryStore::HistoryStore(QObject *parent) : QObject(parent) {}
 
 bool HistoryStore::open() {
@@ -69,6 +94,53 @@ void HistoryStore::recordVisit(const QString &url, const QString &title) {
   query.bindValue(":t", QDateTime::currentMSecsSinceEpoch());
   if (!query.exec()) {
     qWarning() << "shinto: recordVisit failed:" << query.lastError().text();
+  }
+}
+
+QVector<HistoryStore::Suggestion> HistoryStore::completeVisited(const QString &prefix,
+                                                                  int limit) const {
+  QVector<Suggestion> out;
+  const QString p = prefix.trimmed();
+  if (p.size() < 2) return out;
+
+  const QString escaped = escapeLike(p);
+  QSqlQuery query(db_);
+  // A prefix match against the host (with or without a leading "www.",
+  // over both schemes) covers the common case of typing a domain; the
+  // title substring match covers recalling a page by what it's about
+  // rather than its URL. visit_count DESC is the "weighted by frequency
+  // of use" ranking; last_visit DESC breaks ties toward what's recent.
+  query.prepare(QStringLiteral(
+      "SELECT url, visit_count FROM visited"
+      " WHERE url LIKE 'http://' || :p1 || '%' ESCAPE '\\'"
+      "    OR url LIKE 'https://' || :p2 || '%' ESCAPE '\\'"
+      "    OR url LIKE 'http://www.' || :p3 || '%' ESCAPE '\\'"
+      "    OR url LIKE 'https://www.' || :p4 || '%' ESCAPE '\\'"
+      "    OR title LIKE '%' || :p5 || '%' ESCAPE '\\'"
+      " ORDER BY visit_count DESC, last_visit DESC LIMIT :limit"));
+  query.bindValue(":p1", escaped);
+  query.bindValue(":p2", escaped);
+  query.bindValue(":p3", escaped);
+  query.bindValue(":p4", escaped);
+  query.bindValue(":p5", escaped);
+  query.bindValue(":limit", limit);
+  if (!query.exec()) {
+    qWarning() << "shinto: completeVisited failed:" << query.lastError().text();
+    return out;
+  }
+  while (query.next()) {
+    const QString url = query.value(0).toString();
+    out.push_back({displayLabel(url), url});
+  }
+  return out;
+}
+
+void HistoryStore::forgetVisited(const QString &url) {
+  QSqlQuery query(db_);
+  query.prepare(QStringLiteral("DELETE FROM visited WHERE url = :url"));
+  query.bindValue(":url", url);
+  if (!query.exec()) {
+    qWarning() << "shinto: forgetVisited failed:" << query.lastError().text();
   }
 }
 

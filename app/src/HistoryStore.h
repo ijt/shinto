@@ -1,13 +1,11 @@
-// Typed-URL + visited-history log, and the omnibox's URL-or-search
-// heuristic. There's no suggestion UI reading this back right now (the
-// omnibox is a plain input, no dropdown) -- recording still happens so the
-// data is there if a completion UI comes back later, but nothing queries
-// it yet.
+// Typed-URL + visited-history log, the omnibox's URL-or-search heuristic,
+// and the omnibox's history-based autocomplete (completeVisited()).
 #pragma once
 
 #include <QObject>
 #include <QSqlDatabase>
 #include <QString>
+#include <QVector>
 
 namespace shinto {
 
@@ -15,6 +13,11 @@ class HistoryStore : public QObject {
   Q_OBJECT
 
  public:
+  struct Suggestion {
+    QString label;  // url with the scheme (and "www.") stripped for display
+    QString url;
+  };
+
   explicit HistoryStore(QObject *parent = nullptr);
 
   // Opens (creating if needed) the SQLite store at shinto::historyDbPath().
@@ -28,6 +31,20 @@ class HistoryStore : public QObject {
   // Records a page visit, called from BrowserWindow on urlChanged/
   // titleChanged. Internal/gate-ish URLs are filtered out.
   void recordVisit(const QString &url, const QString &title);
+
+  // Visited URLs (each url is a SQLite PRIMARY KEY, so already unique)
+  // whose host or title matches `prefix`, ranked by visit_count (most
+  // frequently visited first) -- the omnibox's "you've been here before"
+  // suggestions, as opposed to PopularDomains' baked-in popularity list.
+  // A prefix shorter than 2 characters returns nothing, matching
+  // PopularDomains::complete()'s threshold.
+  QVector<Suggestion> completeVisited(const QString &prefix, int limit) const;
+
+  // Removes one URL from visited history -- the omnibox suggestion
+  // dropdown's per-row "x" button on a history suggestion. Permanent: the
+  // point is the user asked to stop being reminded of it, not a session-
+  // only hide.
+  void forgetVisited(const QString &url);
 
   // Heuristic URL-or-search resolution: has a scheme -> as-is; "//" -> https:;
   // "localhost[:port]/..." or an IPv4 host -> http://; a bare "word.word"

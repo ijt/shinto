@@ -2,12 +2,16 @@
 
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
+#include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
 #include <QSignalBlocker>
+#include <QToolButton>
 
 namespace shinto {
 
@@ -15,6 +19,11 @@ namespace {
 constexpr int kMargin = 24;
 constexpr int kEmptyInputWidth = 280;
 constexpr int kMaxSuggestions = 7;
+// Leaves at least 3 slots for PopularDomains fallback suggestions even
+// when history has plenty of matches -- history is more relevant when it
+// has an answer, but a page you've visited once shouldn't crowd out every
+// domain suggestion.
+constexpr int kMaxHistorySuggestions = 4;
 }  // namespace
 
 OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *domains,
@@ -60,10 +69,12 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *doma
 }
 
 void OmniboxOverlay::applyPalette(const Palette &palette) {
+  currentPalette_ = palette;
   setStyleSheet(palette.toQss());
   QPalette pal = input_->palette();
   pal.setColor(QPalette::PlaceholderText, QColor(palette.muted));
   input_->setPalette(pal);
+  updateSuggestionSelectionStyle();
 }
 
 void OmniboxOverlay::showGate(const QString &prefill) {
@@ -178,6 +189,7 @@ void OmniboxOverlay::moveSelection(int delta) {
   }
   list_->setCurrentRow(cur);
   applySelectionToInput();
+  updateSuggestionSelectionStyle();
 }
 
 void OmniboxOverlay::applySelectionToInput() {
@@ -206,16 +218,88 @@ void OmniboxOverlay::submit() {
 }
 
 void OmniboxOverlay::updateSuggestions() {
-  renderSuggestions(domains_->complete(input_->text(), kMaxSuggestions));
+  const QString text = input_->text();
+  QVector<Suggestion> combined;
+  for (const auto &h : history_->completeVisited(text, kMaxHistorySuggestions)) {
+    combined.push_back({h.label, h.url, SuggestionKind::History});
+  }
+  const int remaining = kMaxSuggestions - combined.size();
+  if (remaining > 0) {
+    for (const auto &d : domains_->complete(text, remaining)) {
+      bool alreadyListed = false;
+      for (const auto &c : combined) {
+        if (c.url == d.url) {
+          alreadyListed = true;
+          break;
+        }
+      }
+      if (!alreadyListed) combined.push_back({d.label, d.url, SuggestionKind::Popular});
+    }
+  }
+  renderSuggestions(combined);
 }
 
-void OmniboxOverlay::renderSuggestions(const QVector<PopularDomains::Suggestion> &items) {
+void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
   items_ = items;
   list_->clear();
   for (const auto &item : items_) {
-    list_->addItem(item.label);
+    if (item.kind != SuggestionKind::History) {
+      list_->addItem(item.label);
+      continue;
+    }
+    // History suggestions get a dismiss button (personal browsing data,
+    // unlike the baked-in PopularDomains list) -- a plain-text item can't
+    // host one, so this row is a real child widget instead.
+    auto *listItem = new QListWidgetItem();
+    list_->addItem(listItem);
+
+    auto *row = new QWidget(list_);
+    row->setObjectName(QStringLiteral("SuggestionRow"));
+    auto *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(8, 0, 4, 0);
+    rowLayout->setSpacing(4);
+
+    auto *label = new QLabel(item.label, row);
+    label->setObjectName(QStringLiteral("SuggestionLabel"));
+    rowLayout->addWidget(label, 1);
+
+    auto *dismiss = new QToolButton(row);
+    dismiss->setObjectName(QStringLiteral("SuggestionDismiss"));
+    dismiss->setText(QString::fromUtf8("\xC3\x97"));  // "×"
+    dismiss->setAutoRaise(true);
+    dismiss->setCursor(Qt::PointingHandCursor);
+    dismiss->setFocusPolicy(Qt::NoFocus);
+    dismiss->setToolTip(QStringLiteral("Forget this from history"));
+    rowLayout->addWidget(dismiss);
+
+    const QString url = item.url;
+    connect(dismiss, &QToolButton::clicked, this, [this, url] { dismissHistorySuggestion(url); });
+
+    list_->setItemWidget(listItem, row);
+    listItem->setSizeHint(row->sizeHint());
   }
+  updateSuggestionSelectionStyle();
   layoutInput();
+}
+
+void OmniboxOverlay::dismissHistorySuggestion(const QString &url) {
+  history_->forgetVisited(url);
+  updateSuggestions();
+}
+
+void OmniboxOverlay::updateSuggestionSelectionStyle() {
+  const int cur = list_->currentRow();
+  for (int i = 0; i < items_.size(); ++i) {
+    if (items_[i].kind != SuggestionKind::History) continue;
+    auto *row = list_->itemWidget(list_->item(i));
+    if (!row) continue;
+    auto *label = row->findChild<QLabel *>();
+    if (!label) continue;
+    // Matches card (dark) on the accent-colored selected background --
+    // the same pairing QListWidget::item:selected uses for plain items.
+    label->setStyleSheet(i == cur ? QStringLiteral("color: %1;").arg(currentPalette_.card)
+                                   : QString());
+  }
 }
 
 void OmniboxOverlay::clearSuggestions() {
