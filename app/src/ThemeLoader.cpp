@@ -72,7 +72,8 @@ QString Palette::toQss() const {
              "#OmniboxOverlay QListWidget {"
              " background: %2; color: %3; border: 1px solid %4;"
              " font-family: %5; outline: none; }\n"
-             "#OmniboxOverlay QListWidget::item:selected { background: %6; color: %2; }\n")
+             "#OmniboxOverlay QListWidget::item:selected { background: %6; color: %2; }\n"
+             "#OmniboxOverlay #ProgressBar { background: %6; border: none; }\n")
       .arg(bg, card, fg, muted, font, accent);
 }
 

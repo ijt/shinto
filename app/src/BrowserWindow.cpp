@@ -122,6 +122,10 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   connect(webView_->page(), &QWebEnginePage::titleChanged, this, [this](const QString &title) {
     history_->recordVisit(webView_->url().toString(), title);
   });
+  // Only visibly does anything while the gate itself is showing (waiting
+  // out onOverlayNavigate's held-open gate below) -- harmless no-op
+  // otherwise, since the progress bar is part of the (then-hidden) gate.
+  connect(webView_->page(), &QWebEnginePage::loadProgress, overlay_, &OmniboxOverlay::setProgress);
   // The QtWebEngine equivalent of Chromium's "exploded" multi-tab windows:
   // target=_blank / window.open() / ctrl-click all route through this one
   // signal. Redirecting to our own new window (and never calling
@@ -194,7 +198,9 @@ void BrowserWindow::onOverlayNavigate(const QString &url) {
   // hiding it right away would flash the previous page's last frame while
   // the new one loads, since navigation is asynchronous. state_ stays Gate
   // (or Empty) in the meantime, so a resize mid-load still repositions the
-  // still-visible gate correctly.
+  // still-visible gate correctly. The progress bar is the only feedback
+  // that anything is happening during that wait.
+  overlay_->setProgress(0);
   connect(
       webView_->page(), &QWebEnginePage::loadFinished, this,
       [this](bool) {

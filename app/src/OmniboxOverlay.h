@@ -38,6 +38,11 @@ class OmniboxOverlay : public QWidget {
   // Hides without navigating anywhere -- what Escape does.
   void hideOverlay();
 
+  // A thin accent-colored line at the top, `percent` of the window wide --
+  // the only feedback while the gate stays up waiting for a just-submitted
+  // navigation to actually load (see BrowserWindow::onOverlayNavigate).
+  void setProgress(int percent);
+
  signals:
   // The user submitted a destination (typed text resolved via
   // HistoryStore::toUrl, or picked a suggestion).
@@ -52,6 +57,7 @@ class OmniboxOverlay : public QWidget {
  private:
   void submit();
   void layoutInput();
+  void layoutProgressBar();
   void updateSuggestions();
   void renderSuggestions(const QVector<PopularDomains::Suggestion> &items);
   void clearSuggestions();
@@ -63,6 +69,8 @@ class OmniboxOverlay : public QWidget {
   const PopularDomains *domains_;
   QLineEdit *input_;
   QListWidget *list_;
+  QWidget *progressBar_;
+  int progress_ = 0;
   QVector<PopularDomains::Suggestion> items_;
 };
 

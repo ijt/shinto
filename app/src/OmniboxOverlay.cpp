@@ -35,6 +35,10 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *doma
   list_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   list_->hide();
+
+  progressBar_ = new QWidget(this);
+  progressBar_->setObjectName(QStringLiteral("ProgressBar"));
+  progressBar_->hide();
   // No QLayout -- position is managed by hand in layoutInput().
 }
 
@@ -48,6 +52,8 @@ void OmniboxOverlay::applyPalette(const Palette &palette) {
 void OmniboxOverlay::showGate() {
   input_->clear();
   clearSuggestions();
+  progress_ = 0;
+  progressBar_->hide();
   layoutInput();
   show();
   raise();
@@ -57,6 +63,12 @@ void OmniboxOverlay::showGate() {
 void OmniboxOverlay::hideOverlay() {
   clearSuggestions();
   hide();
+}
+
+void OmniboxOverlay::setProgress(int percent) {
+  progress_ = qBound(0, percent, 100);
+  progressBar_->setVisible(progress_ > 0 && progress_ < 100 && isVisible());
+  layoutProgressBar();
 }
 
 void OmniboxOverlay::resizeEvent(QResizeEvent *event) {
@@ -78,6 +90,12 @@ void OmniboxOverlay::layoutInput() {
   input_->setGeometry(kMargin, kMargin, w, h);
   list_->setGeometry(kMargin, kMargin + h + 4, w, suggestionListHeight());
   list_->setVisible(!items_.isEmpty());
+  layoutProgressBar();
+}
+
+void OmniboxOverlay::layoutProgressBar() {
+  constexpr int kBarHeight = 3;
+  progressBar_->setGeometry(0, 0, width() * progress_ / 100, kBarHeight);
 }
 
 bool OmniboxOverlay::eventFilter(QObject *obj, QEvent *event) {
