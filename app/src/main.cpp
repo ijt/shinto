@@ -78,6 +78,16 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i < argc; ++i) {
     args << QString::fromLocal8Bit(argv[i]);
   }
+
+  if (args.removeOne(QStringLiteral("--theme"))) {
+    // `shinto theme` (the Omarchy theme-set hook): tell an already-running
+    // daemon to re-read colors.toml and re-apply it live. A no-op if
+    // nothing's listening -- there's no daemon to theme.
+    QCoreApplication probe(argc, argv);
+    shinto::SingletonClient::tryHandoff(QStringLiteral("THEME"));
+    return 0;
+  }
+
   const bool forceDaemon = args.removeOne(QStringLiteral("--daemon"));
   const QString url = args.isEmpty() ? QString() : args.first();
 

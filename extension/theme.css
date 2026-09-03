@@ -1,9 +1,0 @@
-:root,
-:host {
-  --bg: #1a1b26;
-  --fg: #c0caf5;
-  --accent: #7aa2f7;
-  --muted: #565f89;
-  --card: #24283b;
-  --font: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, monospace;
-}
