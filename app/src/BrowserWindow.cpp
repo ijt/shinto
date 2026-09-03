@@ -243,6 +243,15 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
               showNormal();
             }
           });
+  // No handler connected for QWebEnginePage::webAuthUxRequested (account
+  // picker / PIN entry for a real WebAuthn ceremony) -- see
+  // WebProfile.cpp's installWebAuthnCapabilityShim(), which heads this
+  // off further upstream by making feature-detection answer "no WebAuthn
+  // here" instead of hanging, so most pages never get far enough to raise
+  // this. But a site that proceeds anyway (or a future one that doesn't
+  // gate on the shimmed calls) would raise a request nothing answers,
+  // hanging again one layer deeper. Known gap, not yet worth a full
+  // native dialog for -- see the plan this was scoped from.
 
   auto addShortcut = [this](const QKeySequence &seq, auto slot) {
     auto *sc = new QShortcut(seq, this);
