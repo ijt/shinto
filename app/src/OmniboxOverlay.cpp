@@ -2,45 +2,12 @@
 
 #include <QEvent>
 #include <QKeyEvent>
-#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QPainter>
-#include <QPixmap>
 #include <QTimer>
 #include <QVBoxLayout>
 
 namespace shinto {
-
-namespace {
-
-// The gate's backdrop art, softened into a dark haze: a cheap blur (shrink,
-// then grow back with smooth interpolation) for mistiness, a dark tint
-// composited only over the art's own pixels (CompositionMode_SourceAtop
-// respects its existing alpha, so the transparent background stays
-// transparent) for "dark", and reduced overall opacity for "subtle" --
-// baked once into a plain pixmap rather than stacked QGraphicsEffects.
-QPixmap mistyBackdrop(const QString &resourcePath) {
-  const QPixmap src(resourcePath);
-  if (src.isNull()) return src;
-
-  const QPixmap tiny = src.scaled(src.size() / 10, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-  const QPixmap blurred = tiny.scaled(src.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-  QPixmap result(blurred.size());
-  result.fill(Qt::transparent);
-  QPainter painter(&result);
-  painter.setRenderHint(QPainter::SmoothPixmapTransform);
-  painter.setOpacity(0.32);
-  painter.drawPixmap(0, 0, blurred);
-  painter.setCompositionMode(QPainter::CompositionMode_SourceAtop);
-  painter.setOpacity(0.6);
-  painter.fillRect(result.rect(), QColor(5, 6, 12));
-  painter.end();
-  return result;
-}
-
-}  // namespace
 
 OmniboxOverlay::OmniboxOverlay(HistoryStore *history, QWidget *parent)
     : QWidget(parent), history_(history) {
@@ -50,11 +17,6 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, QWidget *parent)
   // exactly where a child widget sits, which is what produced the
   // overlapping/"bleeding through" look.
   setAttribute(Qt::WA_StyledBackground, true);
-
-  fujiLabel_ = new QLabel(this);
-  fujiLabel_->setPixmap(mistyBackdrop(QStringLiteral(":/shinto/fuji.png")));
-  fujiLabel_->setScaledContents(false);
-  fujiLabel_->setAlignment(Qt::AlignCenter);
 
   list_ = new QListWidget(this);
   list_->setFocusPolicy(Qt::NoFocus);
@@ -71,7 +33,7 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, QWidget *parent)
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(24, 24, 24, 24);
   layout->setSpacing(8);
-  layout->addWidget(fujiLabel_, /*stretch=*/1);
+  layout->addStretch(/*stretch=*/1);
   layout->addWidget(list_);
   layout->addWidget(input_);
 
@@ -90,7 +52,6 @@ void OmniboxOverlay::applyPalette(const Palette &palette) { setStyleSheet(palett
 
 void OmniboxOverlay::showEmpty() {
   emptyMode_ = true;
-  fujiLabel_->setVisible(true);
   input_->clear();
   clearSuggestions();
   show();
@@ -101,7 +62,6 @@ void OmniboxOverlay::showEmpty() {
 
 void OmniboxOverlay::showEditing(const QString &currentUrl) {
   emptyMode_ = false;
-  fujiLabel_->setVisible(false);
   input_->setText(currentUrl);
   clearSuggestions();
   show();

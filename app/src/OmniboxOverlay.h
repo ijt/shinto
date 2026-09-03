@@ -15,7 +15,6 @@
 
 class QLineEdit;
 class QListWidget;
-class QLabel;
 class QTimer;
 
 namespace shinto {
@@ -28,8 +27,7 @@ class OmniboxOverlay : public QWidget {
 
   void applyPalette(const Palette &palette);
 
-  // Full-screen empty-gate mode: clears the input, shows the "hazy fuji"
-  // background, focuses the input.
+  // Full-screen empty-gate mode: clears the input, focuses it.
   void showEmpty();
 
   // Edit-in-place mode: prefills with `currentUrl`, caret at the end,
@@ -74,7 +72,6 @@ class OmniboxOverlay : public QWidget {
   HistoryStore *history_;
   QLineEdit *input_;
   QListWidget *list_;
-  QLabel *fujiLabel_;
   QTimer *debounce_;
   bool emptyMode_ = true;
   int latestRequestId_ = 0;
