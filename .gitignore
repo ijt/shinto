@@ -1,4 +1,1 @@
-.shinto-extension.pem
-*.pyc
-__pycache__/
 app/build/

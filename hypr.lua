@@ -1,18 +1,6 @@
--- Shinto uses Chromium --app windows. Wayland app_id looks like
--- chrome-<host>__<path>-Default, not the --class flag.
+-- Every Shinto window shares one fixed Wayland app_id ("shinto",
+-- QGuiApplication::setDesktopFileName in app/src/main.cpp) -- there's no
+-- more URL-derived app_id or spare/keep-alive window to special-case; the
+-- daemon stays warm with zero windows on its own (setQuitOnLastWindowClosed).
 
 o.window("shinto", { tag = "+chromium-based-browser" })
-o.window("^chrome-.*-Default$", { tag = "+chromium-based-browser" })
-
--- Keep-alive page stays off-screen (loopback spare, same origin as the gate).
-o.window("chrome-127\\.0\\.0\\.1__spare\\.html-Default", {
-  workspace = "special:shinto-spare silent",
-  no_initial_focus = true,
-  group = "barred",
-})
--- Old extension-origin spare (pre-loopback keep-alive).
-o.window("chrome-badlilcpkdpfckbkeaejdnpinhejkiao__(spare|launch)\\.html-Default", {
-  workspace = "special:shinto-spare silent",
-  no_initial_focus = true,
-  group = "barred",
-})
