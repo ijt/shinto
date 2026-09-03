@@ -57,15 +57,21 @@ int main(int argc, char *argv[]) {
     // scrollbar being visible, which is normal.)
     flags += "--enable-features=OverlayScrollbar ";
     // This machine's Wayland/DRM GBM+EGL native-buffer path for GPU
-    // compositing hits a hard Chromium-side failure (gbm_bo_import
+    // *compositing* hits a hard Chromium-side failure (gbm_bo_import
     // returning nullptr, EGL_BAD_MATCH, then a fatal abort) -- reproduced
     // on every run with real (non-offscreen) rendering.
-    // --disable-gpu-compositing alone still lets Chromium attempt GPU
-    // compositing first and fall back, and that fallback transition tears
-    // down and recreates the native surface -- visible as a one-time
-    // close+reopen right at startup. --disable-gpu skips GPU compositing
-    // attempts entirely, avoiding both the crash and that transition.
-    flags += "--disable-gpu";
+    // --disable-gpu-compositing avoids that crash. Full --disable-gpu was
+    // tried too (also avoids it, plus was thought at the time to fix a
+    // startup close+reopen flicker) but that flicker turned out to be
+    // caused by something else entirely (an idle QWebEngineView, fixed in
+    // BrowserWindow::enterEmpty() via about:blank) -- so --disable-gpu was
+    // never actually necessary, and it's the heavier hammer: it also
+    // disables hardware video decode, which made video-heavy sites (e.g.
+    // YouTube) fall back to CPU-only software decoding, sluggish enough to
+    // look like a hang. --disable-gpu-compositing alone leaves video
+    // decode acceleration intact while still avoiding the compositing
+    // crash.
+    flags += "--disable-gpu-compositing";
     qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
   }
   // Silence a harmless xdg-desktop-portal warning
