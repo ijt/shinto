@@ -218,6 +218,19 @@ void OmniboxOverlay::submit() {
   emit navigateRequested(url);
 }
 
+namespace {
+// "https://rubyonrails.org/" (a history visit, trailing slash and all) and
+// "https://rubyonrails.org" (PopularDomains' bare-domain form) are the same
+// site, but not the same string -- strip a bare trailing slash before
+// comparing so the domain suggestion doesn't show up redundantly right
+// next to the history one for the same root page.
+QString dedupKey(const QString &url) {
+  QString key = url;
+  if (key.endsWith(QLatin1Char('/'))) key.chop(1);
+  return key;
+}
+}  // namespace
+
 void OmniboxOverlay::updateSuggestions() {
   const QString text = input_->text();
   QVector<Suggestion> combined;
@@ -229,7 +242,7 @@ void OmniboxOverlay::updateSuggestions() {
     for (const auto &d : domains_->complete(text, remaining)) {
       bool alreadyListed = false;
       for (const auto &c : combined) {
-        if (c.url == d.url) {
+        if (dedupKey(c.url) == dedupKey(d.url)) {
           alreadyListed = true;
           break;
         }

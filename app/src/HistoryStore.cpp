@@ -21,6 +21,14 @@ QString displayLabel(const QString &url) {
       QStringLiteral("^[a-zA-Z][a-zA-Z0-9+.-]*://(www\\.)?"));
   QString label = url;
   label.remove(kSchemeAndWww);
+  // A bare root path adds nothing over the domain alone, and otherwise
+  // duplicates -- to the eye, if not by exact string -- PopularDomains'
+  // own bare-domain suggestion for the same site (e.g. history's
+  // "rubyonrails.org/" next to the domain list's "rubyonrails.org"). Only
+  // the root: a real path keeps its trailing slash if it had one.
+  if (label.endsWith(QLatin1Char('/')) && label.count(QLatin1Char('/')) == 1) {
+    label.chop(1);
+  }
   return label;
 }
 
