@@ -4,6 +4,7 @@
 // machine to power suggestions.
 #pragma once
 
+#include <QSet>
 #include <QString>
 #include <QVector>
 
@@ -16,8 +17,9 @@ class PopularDomains {
     QString url;    // "https://" + label
   };
 
-  // Loads and sorts the baked-in list once. Cheap enough (~100k short
-  // strings) to do synchronously at daemon startup.
+  // Loads and sorts the baked-in list once, along with any previously
+  // dismissed domains (shinto::dismissedDomainsPath()). Cheap enough
+  // (~100k short strings) to do synchronously at daemon startup.
   PopularDomains();
 
   // Prefix match against the domain list (case-insensitive), ranked by
@@ -25,7 +27,16 @@ class PopularDomains {
   // prefix shorter than 2 characters returns nothing -- consistent with
   // the old typed/history completion's threshold, and avoids single-letter
   // prefixes matching thousands of entries for no useful purpose.
+  // Dismissed domains (see dismiss()) never appear.
   QVector<Suggestion> complete(const QString &prefix, int limit) const;
+
+  // The suggestion dropdown's per-row "x" button on a default (non-
+  // history) suggestion -- permanently excludes this domain from future
+  // complete() results, for every window (this one instance is shared by
+  // the whole daemon), persisted to dismissedDomainsPath() so it survives
+  // a daemon restart too. `url` is a Suggestion::url ("https://domain");
+  // the scheme is stripped before matching against the domain list.
+  void dismiss(const QString &url);
 
  private:
   struct Entry {
@@ -33,6 +44,7 @@ class PopularDomains {
     int rank;
   };
   QVector<Entry> domains_;  // sorted alphabetically by domain
+  QSet<QString> dismissed_;
 };
 
 }  // namespace shinto

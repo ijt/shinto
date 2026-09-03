@@ -4,9 +4,26 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QRegularExpression>
 #include <QTextStream>
 
+#include "Shinto.h"
+
 namespace shinto {
+
+namespace {
+
+// Mirrors HistoryStore's scheme-stripping regex -- Suggestion::url is
+// always "https://" + domain, but dismiss() also accepts whatever a
+// PopularDomains::Suggestion::url actually looked like, defensively.
+QString stripScheme(const QString &url) {
+  static const QRegularExpression kScheme(QStringLiteral("^[a-zA-Z][a-zA-Z0-9+.-]*://"));
+  QString domain = url;
+  domain.remove(kScheme);
+  return domain.toLower();
+}
+
+}  // namespace
 
 PopularDomains::PopularDomains() {
   QFile file(QStringLiteral(":/shinto/top100k-domains.txt"));
@@ -25,6 +42,17 @@ PopularDomains::PopularDomains() {
   }
   std::sort(domains_.begin(), domains_.end(),
             [](const Entry &a, const Entry &b) { return a.domain < b.domain; });
+
+  QFile dismissedFile(dismissedDomainsPath());
+  if (dismissedFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QTextStream dismissedStream(&dismissedFile);
+    while (!dismissedStream.atEnd()) {
+      const QString domain = dismissedStream.readLine().trimmed().toLower();
+      if (!domain.isEmpty()) dismissed_.insert(domain);
+    }
+  }
+  // A missing file is the common case (nothing dismissed yet) -- nothing
+  // to warn about.
 }
 
 QVector<PopularDomains::Suggestion> PopularDomains::complete(const QString &prefix,
@@ -50,11 +78,26 @@ QVector<PopularDomains::Suggestion> PopularDomains::complete(const QString &pref
   std::sort(matches.begin(), matches.end(),
             [](const Entry &a, const Entry &b) { return a.rank < b.rank; });
 
-  const int count = qMin(limit, int(matches.size()));
-  for (int i = 0; i < count; ++i) {
-    out.push_back({matches[i].domain, QStringLiteral("https://") + matches[i].domain});
+  for (const Entry &e : matches) {
+    if (out.size() >= limit) break;
+    if (dismissed_.contains(e.domain)) continue;
+    out.push_back({e.domain, QStringLiteral("https://") + e.domain});
   }
   return out;
+}
+
+void PopularDomains::dismiss(const QString &url) {
+  const QString domain = stripScheme(url);
+  if (domain.isEmpty() || dismissed_.contains(domain)) return;
+  dismissed_.insert(domain);
+
+  QFile file(dismissedDomainsPath());
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+    qWarning() << "shinto: could not persist dismissed domain" << domain << "--"
+               << file.errorString();
+    return;  // still excluded for the rest of this daemon's lifetime, just not saved
+  }
+  QTextStream(&file) << domain << '\n';
 }
 
 }  // namespace shinto

@@ -79,7 +79,7 @@ QVector<BrowserWindow *> BrowserWindow::instances_;
 Palette BrowserWindow::currentPalette_;
 
 BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *history,
-                                     const PopularDomains *domains, const QString &url) {
+                                     PopularDomains *domains, const QString &url) {
   auto *win = new BrowserWindow(profile, history, domains, url);
   win->setAttribute(Qt::WA_DeleteOnClose);
   instances_.push_back(win);
@@ -96,7 +96,7 @@ void BrowserWindow::applyPaletteToAll(const Palette &palette) {
 }
 
 BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
-                              const PopularDomains *domains, const QString &url)
+                              PopularDomains *domains, const QString &url)
     : history_(history), domains_(domains), config_(loadConfig()) {
   setWindowTitle(QStringLiteral("Shinto"));
 

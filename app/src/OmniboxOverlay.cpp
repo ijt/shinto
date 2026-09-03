@@ -26,7 +26,7 @@ constexpr int kMaxSuggestions = 7;
 constexpr int kMaxHistorySuggestions = 4;
 }  // namespace
 
-OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *domains,
+OmniboxOverlay::OmniboxOverlay(HistoryStore *history, PopularDomains *domains,
                                 const ShintoConfig *config, QWidget *parent)
     : QWidget(parent), history_(history), domains_(domains), config_(config) {
   setObjectName(QStringLiteral("OmniboxOverlay"));
@@ -243,13 +243,9 @@ void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
   items_ = items;
   list_->clear();
   for (const auto &item : items_) {
-    if (item.kind != SuggestionKind::History) {
-      list_->addItem(item.label);
-      continue;
-    }
-    // History suggestions get a dismiss button (personal browsing data,
-    // unlike the baked-in PopularDomains list) -- a plain-text item can't
-    // host one, so this row is a real child widget instead.
+    // Every row -- History or Popular -- gets a dismiss button, so every
+    // row is a real child widget rather than plain QListWidgetItem text
+    // (which can't host one).
     auto *listItem = new QListWidgetItem();
     list_->addItem(listItem);
 
@@ -269,11 +265,19 @@ void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
     dismiss->setAutoRaise(true);
     dismiss->setCursor(Qt::PointingHandCursor);
     dismiss->setFocusPolicy(Qt::NoFocus);
-    dismiss->setToolTip(QStringLiteral("Forget this from history"));
+    const bool isHistory = item.kind == SuggestionKind::History;
+    dismiss->setToolTip(isHistory ? QStringLiteral("Forget this from history")
+                                   : QStringLiteral("Hide this suggestion"));
     rowLayout->addWidget(dismiss);
 
     const QString url = item.url;
-    connect(dismiss, &QToolButton::clicked, this, [this, url] { dismissHistorySuggestion(url); });
+    connect(dismiss, &QToolButton::clicked, this, [this, url, isHistory] {
+      if (isHistory) {
+        dismissHistorySuggestion(url);
+      } else {
+        dismissPopularSuggestion(url);
+      }
+    });
 
     list_->setItemWidget(listItem, row);
     listItem->setSizeHint(row->sizeHint());
@@ -287,10 +291,14 @@ void OmniboxOverlay::dismissHistorySuggestion(const QString &url) {
   updateSuggestions();
 }
 
+void OmniboxOverlay::dismissPopularSuggestion(const QString &url) {
+  domains_->dismiss(url);
+  updateSuggestions();
+}
+
 void OmniboxOverlay::updateSuggestionSelectionStyle() {
   const int cur = list_->currentRow();
   for (int i = 0; i < items_.size(); ++i) {
-    if (items_[i].kind != SuggestionKind::History) continue;
     auto *row = list_->itemWidget(list_->item(i));
     if (!row) continue;
     auto *label = row->findChild<QLabel *>();

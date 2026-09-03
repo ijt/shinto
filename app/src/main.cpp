@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
   if (!history.open()) {
     qWarning() << "shinto: continuing without persistent typed/visited history";
   }
-  const shinto::PopularDomains domains;
+  shinto::PopularDomains domains;
 
   shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette());
 

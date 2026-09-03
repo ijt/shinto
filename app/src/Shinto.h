@@ -33,6 +33,13 @@ inline QString webEngineStoragePath() { return dataHome() + "/profile/webengine"
 // SQLite typed/visited history store, independent of the WebEngine profile.
 inline QString historyDbPath() { return dataHome() + "/history.sqlite"; }
 
+// One dismissed PopularDomains domain per line -- the omnibox suggestion
+// dropdown's per-row "x" button on a default (non-history) suggestion.
+// Unlike a history entry (an actual SQLite row deleted outright), the
+// baked-in domain list is a read-only Qt resource, so a dismissal is
+// tracked as an exclusion list layered on top instead.
+inline QString dismissedDomainsPath() { return dataHome() + "/dismissed_domains.txt"; }
+
 // Omarchy's per-theme color file.
 inline QString colorsTomlPath() {
   return QDir::homePath() + "/.local/state/omarchy/current/theme/colors.toml";

@@ -5,10 +5,11 @@
 // the still-loaded page, rather than a prefilled address bar). A dropdown
 // appears below the input as you type, blending two sources: the user's
 // own visited history (HistoryStore::completeVisited(), ranked by visit
-// frequency, dismissible per-row via an "x" button since it's personal
-// data) filling first, then offline domain-prefix suggestions
+// frequency) filling first, then offline domain-prefix suggestions
 // (PopularDomains) filling whatever room is left. Nothing typed ever
-// leaves the machine to power either.
+// leaves the machine to power either. Every row has a per-row "x" button
+// to dismiss it -- permanently, from HistoryStore or PopularDomains'
+// respective backing store, whichever it came from.
 //
 // This is never a navigable URL -- Escape simply hides it, since the
 // underlying page (if any) was never touched.
@@ -34,7 +35,7 @@ class OmniboxOverlay : public QWidget {
   Q_OBJECT
 
  public:
-  OmniboxOverlay(HistoryStore *history, const PopularDomains *domains, const ShintoConfig *config,
+  OmniboxOverlay(HistoryStore *history, PopularDomains *domains, const ShintoConfig *config,
                  QWidget *parent = nullptr);
 
   void applyPalette(const Palette &palette);
@@ -85,16 +86,18 @@ class OmniboxOverlay : public QWidget {
   int suggestionListHeight() const;
   void startShimmer();
   void stopShimmer();
-  // The suggestion dropdown's per-row "x" button on a History-kind entry --
-  // forgets it (permanently, from HistoryStore) and refreshes the list.
+  // The suggestion dropdown's per-row "x" button: forgets it (permanently,
+  // from HistoryStore or PopularDomains, whichever it came from) and
+  // refreshes the list.
   void dismissHistorySuggestion(const QString &url);
-  // A History row's label is a real QLabel, not item text -- QListWidget's
-  // own `::item:selected` QSS color override never reaches it, so this
+  void dismissPopularSuggestion(const QString &url);
+  // A row's label is a real QLabel, not item text -- QListWidget's own
+  // `::item:selected` QSS color override never reaches it, so this
   // mirrors that override by hand on whichever row is currentRow().
   void updateSuggestionSelectionStyle();
 
   HistoryStore *history_;
-  const PopularDomains *domains_;
+  PopularDomains *domains_;
   const ShintoConfig *config_;
   Palette currentPalette_;
   QLineEdit *input_;

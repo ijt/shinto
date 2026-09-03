@@ -36,7 +36,7 @@ class BrowserWindow : public QMainWindow {
   // at daemon startup; loadConfig() is cheap next to everything else spawn
   // already does.
   static BrowserWindow *spawn(QWebEngineProfile *profile, HistoryStore *history,
-                               const PopularDomains *domains, const QString &url);
+                               PopularDomains *domains, const QString &url);
 
   // Re-applies a reloaded theme to every live window (the `shinto theme` /
   // Omarchy theme-set-hook path, delivered over the singleton socket).
@@ -50,7 +50,7 @@ class BrowserWindow : public QMainWindow {
  private:
   enum class State { Empty, Loaded, Gate };
 
-  BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, const PopularDomains *domains,
+  BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, PopularDomains *domains,
                 const QString &url);
 
   void relayout();
@@ -62,7 +62,7 @@ class BrowserWindow : public QMainWindow {
   void onEditAddressShortcut();
 
   HistoryStore *history_;
-  const PopularDomains *domains_;
+  PopularDomains *domains_;
   // Owned by this window, not shared -- loaded fresh in the constructor
   // (see spawn()'s doc comment), so each window can have read a different
   // config.lua than its siblings if the file changed between opens.
