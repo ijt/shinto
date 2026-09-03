@@ -94,7 +94,7 @@ Hyprland groups (these are the tabs):
 
 ## Configuration
 
-Shinto reads `~/.config/shinto/config.lua` (a real Lua file, executed with an embedded Lua 5.4 interpreter — nothing to restart, just start a fresh daemon) on startup. Currently one setting:
+Shinto reads `~/.config/shinto/config.lua` (a real Lua file, executed with an embedded Lua 5.4 interpreter) fresh every time a new window opens — no restart needed, even against a daemon that's been running for days; just open a new window (`Ctrl+T`/`Ctrl+N`, or `Super+Shift+Return`) after editing the file. Currently one setting:
 
 ```lua
 -- Search fallback for whatever the omnibox doesn't recognize as a URL.

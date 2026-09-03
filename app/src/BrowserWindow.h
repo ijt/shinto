@@ -30,10 +30,13 @@ class BrowserWindow : public QMainWindow {
 
  public:
   // Creates, registers, shows, and returns a new window. `url` empty means
-  // start in the empty-gate state; non-empty loads it immediately.
+  // start in the empty-gate state; non-empty loads it immediately. Reads
+  // config.lua fresh (see Config.h) for this one window -- the daemon can
+  // stay warm for days, so config shouldn't be stuck at whatever it read
+  // at daemon startup; loadConfig() is cheap next to everything else spawn
+  // already does.
   static BrowserWindow *spawn(QWebEngineProfile *profile, HistoryStore *history,
-                               const PopularDomains *domains, const ShintoConfig *config,
-                               const QString &url);
+                               const PopularDomains *domains, const QString &url);
 
   // Re-applies a reloaded theme to every live window (the `shinto theme` /
   // Omarchy theme-set-hook path, delivered over the singleton socket).
@@ -48,7 +51,7 @@ class BrowserWindow : public QMainWindow {
   enum class State { Empty, Loaded, Gate };
 
   BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, const PopularDomains *domains,
-                const ShintoConfig *config, const QString &url);
+                const QString &url);
 
   void relayout();
   void enterEmpty();
@@ -60,7 +63,10 @@ class BrowserWindow : public QMainWindow {
 
   HistoryStore *history_;
   const PopularDomains *domains_;
-  const ShintoConfig *config_;
+  // Owned by this window, not shared -- loaded fresh in the constructor
+  // (see spawn()'s doc comment), so each window can have read a different
+  // config.lua than its siblings if the file changed between opens.
+  ShintoConfig config_;
   WebView *webView_;
   OmniboxOverlay *overlay_;
   State state_ = State::Empty;

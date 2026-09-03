@@ -79,9 +79,8 @@ QVector<BrowserWindow *> BrowserWindow::instances_;
 Palette BrowserWindow::currentPalette_;
 
 BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *history,
-                                     const PopularDomains *domains, const ShintoConfig *config,
-                                     const QString &url) {
-  auto *win = new BrowserWindow(profile, history, domains, config, url);
+                                     const PopularDomains *domains, const QString &url) {
+  auto *win = new BrowserWindow(profile, history, domains, url);
   win->setAttribute(Qt::WA_DeleteOnClose);
   instances_.push_back(win);
   win->resize(1200, 800);
@@ -97,9 +96,8 @@ void BrowserWindow::applyPaletteToAll(const Palette &palette) {
 }
 
 BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
-                              const PopularDomains *domains, const ShintoConfig *config,
-                              const QString &url)
-    : history_(history), domains_(domains), config_(config) {
+                              const PopularDomains *domains, const QString &url)
+    : history_(history), domains_(domains), config_(loadConfig()) {
   setWindowTitle(QStringLiteral("Shinto"));
 
   auto *container = new QWidget(this);
@@ -107,7 +105,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
 
   webView_ = new WebView(profile, container);
 
-  overlay_ = new OmniboxOverlay(history_, domains_, config_, container);
+  overlay_ = new OmniboxOverlay(history_, domains_, &config_, container);
   overlay_->applyPalette(currentPalette_);
 
   auto *layout = new QVBoxLayout(container);
@@ -140,7 +138,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   // detect and close a stray window after the fact.
   connect(webView_->page(), &QWebEnginePage::newWindowRequested, this,
           [this](QWebEngineNewWindowRequest &request) {
-            BrowserWindow::spawn(webView_->page()->profile(), history_, domains_, config_,
+            BrowserWindow::spawn(webView_->page()->profile(), history_, domains_,
                                   request.requestedUrl().toString());
           });
   // Fullscreen API: enablement lives on the shared profile; accepting the
@@ -242,7 +240,7 @@ void BrowserWindow::onOverlayCancelled() {
 }
 
 void BrowserWindow::onNewPageShortcut() {
-  BrowserWindow::spawn(webView_->page()->profile(), history_, domains_, config_, QString());
+  BrowserWindow::spawn(webView_->page()->profile(), history_, domains_, QString());
 }
 
 void BrowserWindow::onEditAddressShortcut() {
