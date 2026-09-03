@@ -1,14 +1,12 @@
-// TEMPORARY diagnostic build: nothing but a QMainWindow containing a
-// QWebEngineView loaded to example.com. No daemon/singleton logic, no
-// overlay, no custom profile -- to isolate whether the intermittent
-// startup close+reopen flicker is inherent to QWebEngineView itself, or
-// caused by something in our own BrowserWindow/OmniboxOverlay scaffolding.
-// The real main.cpp is in git history (`git log -- app/src/main.cpp`) and
-// will be restored once this test answers that question.
+// TEMPORARY diagnostic build: like the previous commit, but the
+// QWebEngineView is never given a URL at all (no setUrl call) -- this is
+// the one concrete difference between this test and BrowserWindow's real
+// "Empty" state (a freshly-opened window, nothing loaded, omnibox shown
+// full-screen): does an idle/never-navigated QWebEngineView flicker where
+// an actively-loading one (previous commit) didn't?
 #include <QApplication>
 #include <QMainWindow>
 #include <QSurfaceFormat>
-#include <QUrl>
 #include <QWebEngineView>
 
 int main(int argc, char *argv[]) {
@@ -24,9 +22,10 @@ int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 
   QMainWindow win;
-  win.setWindowTitle(QStringLiteral("Shinto (web view test)"));
+  win.setWindowTitle(QStringLiteral("Shinto (idle web view test)"));
   auto *view = new QWebEngineView(&win);
-  view->setUrl(QUrl(QStringLiteral("https://example.com")));
+  // Deliberately no setUrl() call -- this is the difference from the last
+  // test.
   win.setCentralWidget(view);
   win.resize(1200, 800);
   win.show();
