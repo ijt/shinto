@@ -10,6 +10,7 @@
 #include <QListWidgetItem>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
+#include <QSet>
 #include <QSignalBlocker>
 #include <QToolButton>
 
@@ -234,20 +235,28 @@ QString dedupKey(const QString &url) {
 void OmniboxOverlay::updateSuggestions() {
   const QString text = input_->text();
   QVector<Suggestion> combined;
+  QSet<QString> seen;
+  // "https://rubyonrails.org" and "https://rubyonrails.org/" are two
+  // distinct SQLite `visited` rows (url is the PRIMARY KEY) if the site
+  // was ever visited both ways -- completeVisited() can legitimately
+  // return both. Dedup as everything is assembled, not just between
+  // history and PopularDomains, so two history rows for the same site
+  // don't both survive either.
+  auto tryAdd = [&](const QString &label, const QString &url, SuggestionKind kind) {
+    // QSet::insert() (unlike std::set's) doesn't report whether the value
+    // was already present, so check first.
+    const QString key = dedupKey(url);
+    if (seen.contains(key)) return;
+    seen.insert(key);
+    combined.push_back({label, url, kind});
+  };
   for (const auto &h : history_->completeVisited(text, kMaxHistorySuggestions)) {
-    combined.push_back({h.label, h.url, SuggestionKind::History});
+    tryAdd(h.label, h.url, SuggestionKind::History);
   }
   const int remaining = kMaxSuggestions - combined.size();
   if (remaining > 0) {
     for (const auto &d : domains_->complete(text, remaining)) {
-      bool alreadyListed = false;
-      for (const auto &c : combined) {
-        if (dedupKey(c.url) == dedupKey(d.url)) {
-          alreadyListed = true;
-          break;
-        }
-      }
-      if (!alreadyListed) combined.push_back({d.label, d.url, SuggestionKind::Popular});
+      tryAdd(d.label, d.url, SuggestionKind::Popular);
     }
   }
   renderSuggestions(combined);

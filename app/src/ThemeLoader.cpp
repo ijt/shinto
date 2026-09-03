@@ -70,7 +70,7 @@ QString Palette::toQss() const {
              " padding: 0; font-family: %5; font-size: 15px;"
              " selection-background-color: %6; }\n"
              "#OmniboxOverlay QListWidget {"
-             " background: %2; color: %3; border: 1px solid %4;"
+             " background: %2; color: %3; border: none;"
              " font-family: %5; outline: none; }\n"
              "#OmniboxOverlay QListWidget::item:selected { background: %6; color: %2; }\n"
              // History suggestion rows (SuggestionRow/SuggestionLabel/
