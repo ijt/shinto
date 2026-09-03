@@ -115,9 +115,6 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
 
   connect(overlay_, &OmniboxOverlay::navigateRequested, this, &BrowserWindow::onOverlayNavigate);
   connect(overlay_, &OmniboxOverlay::cancelled, this, &BrowserWindow::onOverlayCancelled);
-  // The suggestion list grows/shrinks as you type; keep the editing bar
-  // sized to fit it instead of leaving it crushed into a fixed height.
-  connect(overlay_, &OmniboxOverlay::contentSizeChanged, this, &BrowserWindow::relayout);
 
   connect(webView_->page(), &QWebEnginePage::urlChanged, this, [this](const QUrl &navUrl) {
     history_->recordVisit(navUrl.toString(), webView_->page()->title());

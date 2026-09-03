@@ -10,7 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets WebEngineWidgets Network Sql)
+find_package(Qt6 REQUIRED COMPONENTS Widgets WebEngineWidgets Sql)
 
 qt_add_executable(shinto-bin
   src/main.cpp
@@ -27,7 +27,6 @@ qt_add_executable(shinto-bin
 target_link_libraries(shinto-bin PRIVATE
   Qt6::Widgets
   Qt6::WebEngineWidgets
-  Qt6::Network
   Qt6::Sql
 )
 

@@ -65,11 +65,7 @@ QString Palette::toQss() const {
              "#OmniboxOverlay QLineEdit {"
              " background: %2; color: %3; border: 1px solid %4;"
              " border-radius: 6px; padding: 8px 12px; font-family: %5;"
-             " font-size: 15px; selection-background-color: %6; }\n"
-             "#OmniboxOverlay QListWidget {"
-             " background: %2; color: %3; border: 1px solid %4;"
-             " font-family: %5; outline: none; }\n"
-             "#OmniboxOverlay QListWidget::item:selected { background: %6; color: %2; }\n")
+             " font-size: 15px; selection-background-color: %6; }\n")
       .arg(bg, card, fg, muted, font, accent);
 }
 

@@ -1,15 +1,13 @@
-// Typed-URL + visited-history store and omnibox suggestion ranking.
-// Replaces chrome.storage.local's "typed" list, chrome.history.search, the
-// Google-suggest fetch, and completeQuery/completeToUrl/toUrl from
-// extension/background.js and extension/newtab.js.
+// Typed-URL + visited-history log, and the omnibox's URL-or-search
+// heuristic. There's no suggestion UI reading this back right now (the
+// omnibox is a plain input, no dropdown) -- recording still happens so the
+// data is there if a completion UI comes back later, but nothing queries
+// it yet.
 #pragma once
 
 #include <QObject>
 #include <QSqlDatabase>
 #include <QString>
-#include <QVector>
-
-class QNetworkAccessManager;
 
 namespace shinto {
 
@@ -17,12 +15,6 @@ class HistoryStore : public QObject {
   Q_OBJECT
 
  public:
-  struct Suggestion {
-    QString url;
-    QString label;
-    QString kind;  // "typed" | "history" | "search"
-  };
-
   explicit HistoryStore(QObject *parent = nullptr);
 
   // Opens (creating if needed) the SQLite store at shinto::historyDbPath().
@@ -30,39 +22,25 @@ class HistoryStore : public QObject {
   bool open();
 
   // Records an omnibox submission. `url` is what was navigated to; `q` is
-  // the raw text the user typed (used as the suggestion label).
+  // the raw text the user typed.
   void recordTyped(const QString &q, const QString &url);
 
   // Records a page visit, called from BrowserWindow on urlChanged/
-  // titleChanged. Internal/gate-ish URLs are filtered out, same as the old
-  // isInternalUrl().
+  // titleChanged. Internal/gate-ish URLs are filtered out.
   void recordVisit(const QString &url, const QString &title);
-
-  // Async: merges local typed/visited matches (synchronous, SQLite) with a
-  // Google-suggest network fetch (asynchronous, best-effort, ~700ms budget),
-  // then emits completionsReady(requestId, ...) exactly once. Callers should
-  // discard results for any requestId other than their latest.
-  void requestCompletions(int requestId, const QString &query);
 
   // Heuristic URL-or-search resolution: has a scheme -> as-is; "//" -> https:;
   // "localhost[:port]/..." or an IPv4 host -> http://; a bare "word.word"
   // with no spaces -> https://; otherwise -> a DuckDuckGo search. Mirrors
-  // toUrl()/completeToUrl() verbatim.
+  // toUrl()/completeToUrl() from the old extension/background.js verbatim.
   static QString toUrl(const QString &raw);
-
- signals:
-  void completionsReady(int requestId, QVector<Suggestion> results);
 
  private:
   static bool isInternalUrl(const QString &url);
-  static QString prettyUrl(const QString &url);
-  QVector<Suggestion> localMatches(const QString &query, int limit) const;
   void trimTyped();
 
   QSqlDatabase db_;
-  QNetworkAccessManager *net_;
   static constexpr int kTypedMax = 300;
-  static constexpr int kCompleteShow = 7;
 };
 
 }  // namespace shinto
