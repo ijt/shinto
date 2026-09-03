@@ -14,7 +14,6 @@
 
 class QWebEngineProfile;
 class QResizeEvent;
-class QCloseEvent;
 
 namespace shinto {
 
@@ -38,7 +37,6 @@ class BrowserWindow : public QMainWindow {
 
  protected:
   void resizeEvent(QResizeEvent *event) override;
-  void closeEvent(QCloseEvent *event) override;  // TODO(debug): remove after diagnosing the startup flicker
 
  private:
   enum class State { Empty, Loaded, Editing };

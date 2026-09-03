@@ -1,6 +1,5 @@
 #include "BrowserWindow.h"
 
-#include <QCloseEvent>
 #include <QKeyEvent>
 #include <QResizeEvent>
 #include <QShortcut>
@@ -80,7 +79,6 @@ Palette BrowserWindow::currentPalette_;
 
 BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *history,
                                      const QString &url) {
-  qWarning("shinto: spawn() url=%s instances_before=%d", qPrintable(url), instances_.size());
   auto *win = new BrowserWindow(profile, history, url);
   win->setAttribute(Qt::WA_DeleteOnClose);
   instances_.push_back(win);
@@ -135,8 +133,6 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   // detect and close a stray window after the fact.
   connect(webView_->page(), &QWebEnginePage::newWindowRequested, this,
           [this](QWebEngineNewWindowRequest &request) {
-            qWarning("shinto: newWindowRequested url=%s type=%d",
-                     qPrintable(request.requestedUrl().toString()), int(request.destination()));
             BrowserWindow::spawn(webView_->page()->profile(), history_,
                                   request.requestedUrl().toString());
           });
@@ -150,10 +146,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_N), &BrowserWindow::onNewPageShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_L), &BrowserWindow::onEditAddressShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_K), &BrowserWindow::onEditAddressShortcut);
-  addShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), [this] {
-    qWarning("shinto: Ctrl+W close() this=%p", (void *)this);
-    close();
-  });
+  addShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), [this] { close(); });
 
   if (url.isEmpty()) {
     enterEmpty();
@@ -164,19 +157,11 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   }
 }
 
-BrowserWindow::~BrowserWindow() {
-  qWarning("shinto: ~BrowserWindow this=%p instances_before=%d", (void *)this, instances_.size());
-  instances_.removeOne(this);
-}
+BrowserWindow::~BrowserWindow() { instances_.removeOne(this); }
 
 void BrowserWindow::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
   relayout();
-}
-
-void BrowserWindow::closeEvent(QCloseEvent *event) {
-  qWarning("shinto: closeEvent this=%p spontaneous=%d", (void *)this, event->spontaneous());
-  QMainWindow::closeEvent(event);
 }
 
 void BrowserWindow::relayout() {
@@ -192,6 +177,14 @@ void BrowserWindow::relayout() {
 void BrowserWindow::enterEmpty() {
   state_ = State::Empty;
   relayout();
+  // A QWebEngineView that's never been navigated at all can make Qt
+  // recreate the window's native surface once, shortly after this window
+  // is first mapped -- visible as a startup close+reopen flicker (root-
+  // caused via isolated testing: reproduced with a bare idle
+  // QWebEngineView, gone once it was given something, anything, to load).
+  // about:blank gives the compositor a real frame to commit while still
+  // looking empty -- the omnibox fully covers it either way.
+  webView_->setUrl(QUrl(QStringLiteral("about:blank")));
   overlay_->showEmpty();
 }
 
