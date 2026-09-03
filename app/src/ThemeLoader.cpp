@@ -63,7 +63,7 @@ QString Palette::toQss() const {
   return QStringLiteral(
              "#OmniboxOverlay { background: %1; }\n"
              "#OmniboxOverlay QLineEdit {"
-             " background: transparent; color: %3; border: none;"
+             " background: transparent; color: #ffffff; border: none;"
              " border-bottom: 2px solid %4; border-radius: 0; padding: 8px 4px;"
              " font-family: %5; font-size: 15px; selection-background-color: %6; }\n"
              "#OmniboxOverlay QLineEdit:focus { border-bottom: 2px solid %6; }\n")
