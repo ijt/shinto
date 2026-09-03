@@ -121,6 +121,9 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
     history_->recordVisit(navUrl.toString(), webView_->page()->title());
   });
   connect(webView_->page(), &QWebEnginePage::titleChanged, this, [this](const QString &title) {
+    // Hyprland group tabs (and the window decoration) read this title --
+    // leave it as "Shinto" only while the gate/about:blank has no page title.
+    setWindowTitle(title.isEmpty() ? QStringLiteral("Shinto") : title);
     history_->recordVisit(webView_->url().toString(), title);
   });
   // Only visibly does anything while the gate itself is showing (waiting
@@ -190,6 +193,7 @@ void BrowserWindow::relayout() {
 
 void BrowserWindow::enterEmpty() {
   state_ = State::Empty;
+  setWindowTitle(QStringLiteral("Shinto"));
   relayout();
   // A QWebEngineView that's never been navigated at all can make Qt
   // recreate the window's native surface once, shortly after this window
