@@ -1,12 +1,13 @@
-// TEMPORARY diagnostic build: like the previous commit, but the
-// QWebEngineView is never given a URL at all (no setUrl call) -- this is
-// the one concrete difference between this test and BrowserWindow's real
-// "Empty" state (a freshly-opened window, nothing loaded, omnibox shown
-// full-screen): does an idle/never-navigated QWebEngineView flicker where
-// an actively-loading one (previous commit) didn't?
+// TEMPORARY diagnostic build: previous commit proved an idle/never-
+// navigated QWebEngineView flickers while an actively-loading one
+// doesn't. This tests the cheap fix: load "about:blank" explicitly (a
+// real navigation Chromium actually commits/paints a frame for) instead
+// of leaving the view truly untouched -- still looks empty to the user,
+// but gives QtWebEngine's compositor something to actually attach to.
 #include <QApplication>
 #include <QMainWindow>
 #include <QSurfaceFormat>
+#include <QUrl>
 #include <QWebEngineView>
 
 int main(int argc, char *argv[]) {
@@ -22,10 +23,9 @@ int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 
   QMainWindow win;
-  win.setWindowTitle(QStringLiteral("Shinto (idle web view test)"));
+  win.setWindowTitle(QStringLiteral("Shinto (about:blank test)"));
   auto *view = new QWebEngineView(&win);
-  // Deliberately no setUrl() call -- this is the difference from the last
-  // test.
+  view->setUrl(QUrl(QStringLiteral("about:blank")));
   win.setCentralWidget(view);
   win.resize(1200, 800);
   win.show();
