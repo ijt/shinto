@@ -12,36 +12,54 @@ namespace shinto {
 
 namespace {
 
-// Chromium's own --enable-features=OverlayScrollbar (see main.cpp) only
-// changes the *browser's* default scrollbar rendering; a site that styles
-// its own scrollbars via CSS (::-webkit-scrollbar rules -- common, and
-// what DuckDuckGo's results page does) overrides that entirely. Only
-// injected CSS can force it site-wide.
+// Chromium's own --enable-features=OverlayScrollbar (see main.cpp) is
+// supposed to give exactly this "hidden, appears while scrolling, fades
+// back out" behavior, but produces no visible effect in this build (and
+// wouldn't survive a site styling its own scrollbars via CSS anyway, like
+// DuckDuckGo's results page does) -- so it's implemented by hand here:
+// scrollbars are zero-width by default, and a capture-phase `scroll`
+// listener (scroll events don't bubble, but they do fire on ancestors
+// during capture) adds a class that makes the scrollbar for whatever
+// element is actually scrolling visible, removing it again after a short
+// idle period. A WeakMap keyed by element keeps each scrollable region's
+// timer independent.
 //
-// This replaces an earlier attempt that injected at DocumentCreation
-// (Chromium's document_start) with a documentElement-or-document
-// fallback -- at that very early point the parser hasn't necessarily
-// created <html>/<head> yet, and appending to `document` itself can
-// insert our <style> as the document's root element ahead of the real
-// one, corrupting the rest of parsing and blanking the page (reproduced
-// on a real navigation). DocumentReady runs after the DOM is fully
-// parsed, so document.head is guaranteed to exist for any real HTML
-// page; we just skip non-HTML documents outright rather than guess.
+// Runs at DocumentReady, not DocumentCreation (Chromium's document_start):
+// an earlier attempt injected there with a documentElement-or-document
+// fallback, and at that very early point the parser hasn't necessarily
+// created <html>/<head> yet -- appending to `document` itself can insert
+// our <style> as the document's root element ahead of the real one,
+// corrupting the rest of parsing and blanking the page (reproduced on a
+// real navigation). DocumentReady runs after the DOM is fully parsed, so
+// document.head is guaranteed to exist for any real HTML page; non-HTML
+// documents are simply skipped rather than guessed at.
 void installScrollbarHidingScript(QWebEngineProfile *profile) {
   QWebEngineScript script;
   script.setName(QStringLiteral("shinto-hide-scrollbars"));
   script.setInjectionPoint(QWebEngineScript::DocumentReady);
   script.setWorldId(QWebEngineScript::MainWorld);
   script.setRunsOnSubFrames(true);
-  script.setSourceCode(QStringLiteral(
-      "(function() {"
-      "  if (!document.head) return;"
-      "  var s = document.createElement('style');"
-      "  s.textContent ="
-      "    '*{scrollbar-width:none!important;-ms-overflow-style:none!important;}"
-      "     *::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}';"
-      "  document.head.appendChild(s);"
-      "})();"));
+  script.setSourceCode(QStringLiteral(R"JS(
+(function() {
+  if (!document.head) return;
+  var style = document.createElement('style');
+  style.textContent =
+    '::-webkit-scrollbar{width:0px;height:0px;background:transparent;}' +
+    '.shinto-scrolling::-webkit-scrollbar{width:8px!important;height:8px!important;}' +
+    '.shinto-scrolling::-webkit-scrollbar-track{background:transparent!important;}' +
+    '.shinto-scrolling::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35)!important;border-radius:4px;}';
+  document.head.appendChild(style);
+
+  var timers = new WeakMap();
+  document.addEventListener('scroll', function(e) {
+    var el = e.target === document ? document.documentElement : e.target;
+    if (!el || el.nodeType !== 1) return;
+    el.classList.add('shinto-scrolling');
+    clearTimeout(timers.get(el));
+    timers.set(el, setTimeout(function() { el.classList.remove('shinto-scrolling'); }, 700));
+  }, { capture: true, passive: true });
+})();
+)JS"));
   profile->scripts()->insert(script);
 }
 
