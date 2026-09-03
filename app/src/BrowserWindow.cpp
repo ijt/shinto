@@ -190,10 +190,20 @@ void BrowserWindow::showGateOverPage() {
 }
 
 void BrowserWindow::onOverlayNavigate(const QString &url) {
+  // Keep the gate up until the new page actually has something to paint --
+  // hiding it right away would flash the previous page's last frame while
+  // the new one loads, since navigation is asynchronous. state_ stays Gate
+  // (or Empty) in the meantime, so a resize mid-load still repositions the
+  // still-visible gate correctly.
+  connect(
+      webView_->page(), &QWebEnginePage::loadFinished, this,
+      [this](bool) {
+        state_ = State::Loaded;
+        overlay_->hideOverlay();
+        webView_->setFocus();
+      },
+      Qt::SingleShotConnection);
   webView_->setUrl(QUrl(url));
-  state_ = State::Loaded;
-  overlay_->hideOverlay();
-  webView_->setFocus();
 }
 
 void BrowserWindow::onOverlayCancelled() {
