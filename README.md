@@ -98,11 +98,26 @@ Shinto reads `~/.config/shinto/config.lua` (a real Lua file, executed with an em
 
 ```lua
 -- Search fallback for whatever the omnibox doesn't recognize as a URL.
--- "%s" is replaced with the percent-encoded query. Defaults to DuckDuckGo.
+-- "%s" is replaced with the percent-encoded query. Defaults to DuckDuckGo
+-- (below) if config.lua doesn't set this, or doesn't exist at all.
 search_engine = "https://www.google.com/search?q=%s"
 ```
 
-The file is optional — no `config.lua` (or a broken one) just falls back to the defaults, with a warning on stderr for a broken one.
+The file is optional — no `config.lua` (or a broken one) just falls back to the defaults. A broken one (syntax error, or a `search_engine` missing the `%s` placeholder) also fires a desktop notification saying why, so it's never silent.
+
+It's real Lua, so `search_engine` can be computed however you like (env vars via `os.getenv`, a `case`-style table keyed on hostname, etc.) — it just has to end up a string containing `%s`.
+
+#### Search engines
+
+| Engine | `search_engine` |
+|---|---|
+| DuckDuckGo (default) | `https://duckduckgo.com/?q=%s` |
+| Google | `https://www.google.com/search?q=%s` |
+| Bing | `https://www.bing.com/search?q=%s` |
+| Brave Search | `https://search.brave.com/search?q=%s` |
+| Kagi | `https://kagi.com/search?q=%s` |
+| Startpage | `https://www.startpage.com/sp/search?query=%s` |
+| A self-hosted SearXNG instance | `https://<your-instance>/search?q=%s` |
 
 ## Notes
 
