@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/shinto">
+    <file>icon.png</file>
+    <file>fuji.png</file>
+  </qresource>
+</RCC>
