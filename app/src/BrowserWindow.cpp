@@ -357,7 +357,24 @@ void BrowserWindow::onBackShortcut() {
   // meaningless (state_ isn't Loaded), so skip it entirely rather than
   // navigating a page the user isn't even looking at right now.
   if (state_ != State::Loaded) return;
-  if (webView_->history()->canGoBack()) webView_->back();
+
+  QWebEngineHistory *hist = webView_->history();
+  // Every window's history starts with the internal about:blank
+  // enterEmpty() loads before any real navigation -- once that's the
+  // *only* thing left behind the current page, canGoBack() is still true,
+  // but actually going back would land on a blank page, not a previous
+  // one. A window opened directly with a URL (a CLI `shinto <url>`, an
+  // OAuth popup) has no about:blank at all, so canGoBack() is simply
+  // false there. Either way, "no real page to go back to" opens the gate
+  // instead (same as Ctrl+L) -- landing on blank, or doing nothing
+  // silently, are both worse than that.
+  const bool atFirstRealPage = hist->currentItemIndex() == 1 &&
+                                hist->itemAt(0).url() == QUrl(QStringLiteral("about:blank"));
+  if (hist->canGoBack() && !atFirstRealPage) {
+    webView_->back();
+  } else {
+    showGateOverPage();
+  }
 }
 
 void BrowserWindow::onFindShortcut() {
