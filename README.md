@@ -80,6 +80,7 @@ Browser (inside a Shinto window):
 |-----|--------|
 | `Ctrl + T` / `Ctrl + N` | New empty page (new window) |
 | `Ctrl + L` / `Ctrl + K` | Edit this window's address (whole address selected, so typing replaces it). Escape goes back. |
+| `Alt + Left` | Back (configurable, see [Configuration](#configuration)) |
 | `Ctrl + W` / `Super + Q` | Close this page |
 
 Hyprland groups (these are the tabs):
@@ -94,18 +95,22 @@ Hyprland groups (these are the tabs):
 
 ## Configuration
 
-Shinto reads `~/.config/shinto/config.lua` (a real Lua file, executed with an embedded Lua 5.4 interpreter) fresh every time a new window opens — no restart needed, even against a daemon that's been running for days; just open a new window (`Ctrl+T`/`Ctrl+N`, or `Super+Shift+Return`) after editing the file. Currently one setting:
+Shinto reads `~/.config/shinto/config.lua` (a real Lua file, executed with an embedded Lua 5.4 interpreter) fresh every time a new window opens — no restart needed, even against a daemon that's been running for days; just open a new window (`Ctrl+T`/`Ctrl+N`, or `Super+Shift+Return`) after editing the file. Two settings so far:
 
 ```lua
 -- Search fallback for whatever the omnibox doesn't recognize as a URL.
 -- "%s" is replaced with the percent-encoded query. Defaults to DuckDuckGo
 -- (below) if config.lua doesn't set this, or doesn't exist at all.
 search_engine = "https://www.google.com/search?q=%s"
+
+-- Browser-back shortcut, as a Qt key-sequence string. Defaults to
+-- Chromium's own default, Alt+Left.
+back_shortcut = "Ctrl+["
 ```
 
-The file is optional — no `config.lua` (or a broken one) just falls back to the defaults. A broken one (syntax error, or a `search_engine` missing the `%s` placeholder) also fires a desktop notification saying why, so it's never silent.
+The file is optional — no `config.lua` (or a broken one) just falls back to the defaults. A broken one (syntax error, a `search_engine` missing the `%s` placeholder, or a `back_shortcut` that isn't a valid key sequence) also fires a desktop notification saying why, so it's never silent.
 
-It's real Lua, so `search_engine` can be computed however you like (env vars via `os.getenv`, a `case`-style table keyed on hostname, etc.) — it just has to end up a string containing `%s`.
+It's real Lua, so either setting can be computed however you like (env vars via `os.getenv`, a `case`-style table keyed on hostname, etc.) — `search_engine` just has to end up a string containing `%s`, and `back_shortcut` a string Qt's `QKeySequence` recognizes (the same syntax as this table's `Alt+Left`).
 
 #### Search engines
 

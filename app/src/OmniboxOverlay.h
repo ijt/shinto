@@ -3,13 +3,16 @@
 // field at rest -- used both for a fresh window's empty gate and for
 // Ctrl+L on an already-loaded page (which shows this same blank gate over
 // the still-loaded page, rather than a prefilled address bar). A dropdown
-// appears below the input as you type, blending two sources: the user's
-// own visited history (HistoryStore::completeVisited(), ranked by visit
+// appears below the input as you type, filling whatever vertical room the
+// window has (maxSuggestionRows()), blending two sources: the user's own
+// visited history (HistoryStore::completeVisited(), ranked by visit
 // frequency) filling first, then offline domain-prefix suggestions
 // (PopularDomains) filling whatever room is left. Nothing typed ever
-// leaves the machine to power either. Every row has a per-row "x" button
-// to dismiss it -- permanently, from HistoryStore or PopularDomains'
-// respective backing store, whichever it came from.
+// leaves the machine to power either. Rows fade toward the background
+// color going down the list (renderSuggestions()) so a long list reads as
+// "the top few matter most", not a wall of equally-loud text. Every row
+// has a per-row "x" button to dismiss it -- permanently, from HistoryStore
+// or PopularDomains' respective backing store, whichever it came from.
 //
 // This is never a navigable URL -- Escape simply hides it, since the
 // underlying page (if any) was never touched.
@@ -56,10 +59,18 @@ class OmniboxOverlay : public QWidget {
   void setProgress(int percent);
 
  signals:
-  // The user submitted a destination (typed text resolved via
-  // HistoryStore::toUrl (using config_->searchEngineUrl), or picked a
-  // suggestion).
-  void navigateRequested(const QString &url);
+  // The user submitted a destination. `typedQuery` is the raw text typed
+  // when that's what actually produced `url` (via HistoryStore::toUrl,
+  // using config_->searchEngineUrl) -- empty when an existing suggestion
+  // was picked instead, since then `url` is already a real destination,
+  // not something resolved from free-typed text. BrowserWindow uses
+  // `typedQuery` to record it against whatever URL the navigation actually
+  // lands on (see its loadFinished handler) rather than here: search
+  // engines routinely rewrite/redirect the URL Shinto originally
+  // requested, so pairing it with the pre-redirect `url` would silently
+  // never match anything back up later (HistoryStore::completeVisited()'s
+  // join).
+  void navigateRequested(const QString &url, const QString &typedQuery);
   // The user backed out (Escape) without navigating.
   void cancelled();
 
@@ -76,11 +87,20 @@ class OmniboxOverlay : public QWidget {
   };
 
   void submit();
+  // Shared tail of a navigation: clears suggestions, starts the shimmer,
+  // and emits navigateRequested. `typedQuery` is forwarded as-is (see the
+  // signal's doc comment) -- empty for anything already a real
+  // destination (a clicked/picked suggestion), non-empty only for
+  // free-typed text resolved via HistoryStore::toUrl.
+  void navigateTo(const QString &url, const QString &typedQuery);
   void layoutInput();
   void layoutProgressBar();
   void updateSuggestions();
   void renderSuggestions(const QVector<Suggestion> &items);
   void clearSuggestions();
+  // How many suggestion rows roughly fit below the input in the window's
+  // current height -- "fill available space" rather than a fixed count.
+  int maxSuggestionRows() const;
   void moveSelection(int delta);
   void applySelectionToInput();
   int suggestionListHeight() const;
@@ -95,6 +115,12 @@ class OmniboxOverlay : public QWidget {
   // `::item:selected` QSS color override never reaches it, so this
   // mirrors that override by hand on whichever row is currentRow().
   void updateSuggestionSelectionStyle();
+  // Highlights (or un-highlights) one row -- hovering its dismiss button
+  // makes clear exactly which suggestion an accidental click would remove.
+  // Independent of keyboard selection (list_->currentRow()): hovering the
+  // "x" on a row you didn't arrow-key to shouldn't change what pressing
+  // Enter would submit.
+  void setRowHovered(QWidget *row, bool hovered);
 
   HistoryStore *history_;
   PopularDomains *domains_;

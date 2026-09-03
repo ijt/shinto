@@ -6,6 +6,7 @@
 // conditionals, etc.) as long as it ends up setting the right globals.
 #pragma once
 
+#include <QKeySequence>
 #include <QString>
 
 namespace shinto {
@@ -17,6 +18,12 @@ struct ShintoConfig {
   // global `search_engine`, e.g.:
   //   search_engine = "https://www.google.com/search?q=%s"
   QString searchEngineUrl = QStringLiteral("https://duckduckgo.com/?q=%s");
+
+  // Browser-back shortcut. Defaults to Chromium's own default (Alt+Left).
+  // Overridden by config.lua setting the global `back_shortcut` to a Qt
+  // key-sequence string, e.g.:
+  //   back_shortcut = "Ctrl+["
+  QKeySequence backShortcut = QKeySequence(Qt::ALT | Qt::Key_Left);
 };
 
 // Executes configLuaPath() (if it exists) and reads back recognized

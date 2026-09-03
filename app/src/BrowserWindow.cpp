@@ -6,6 +6,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWebEngineFullScreenRequest>
+#include <QWebEngineHistory>
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
@@ -17,7 +18,15 @@ namespace shinto {
 
 namespace {
 
-bool isShintoShortcut(const QKeyEvent *ke) {
+bool isShintoShortcut(const QKeyEvent *ke, const QKeySequence &backShortcut) {
+  // Alt+Left (Chromium's own back shortcut, and this app's default -- see
+  // Config.h) is exactly the kind of thing a focused page/input can eat
+  // via ShortcutOverride, same as Ctrl+T/N/L/K/W below -- e.g. some sites'
+  // own JS treats it as "navigate within an editable field". Configurable,
+  // so it has to be checked by value, not by a fixed key/modifier pair.
+  if (!backShortcut.isEmpty() && QKeySequence(ke->keyCombination()) == backShortcut) {
+    return true;
+  }
   if (ke->modifiers() != Qt::ControlModifier) return false;
   switch (ke->key()) {
     case Qt::Key_T:
@@ -57,8 +66,9 @@ class WebPage : public QWebEnginePage {
 // old content-script approach.
 class WebView : public QWebEngineView {
  public:
-  explicit WebView(QWebEngineProfile *profile, QWidget *parent = nullptr)
-      : QWebEngineView(parent) {
+  explicit WebView(QWebEngineProfile *profile, const QKeySequence &backShortcut,
+                    QWidget *parent = nullptr)
+      : QWebEngineView(parent), backShortcut_(backShortcut) {
     setPage(new WebPage(profile, this));
   }
 
@@ -66,13 +76,16 @@ class WebView : public QWebEngineView {
   bool event(QEvent *e) override {
     if (e->type() == QEvent::ShortcutOverride) {
       auto *ke = static_cast<QKeyEvent *>(e);
-      if (isShintoShortcut(ke)) {
+      if (isShintoShortcut(ke, backShortcut_)) {
         e->ignore();
         return true;
       }
     }
     return QWebEngineView::event(e);
   }
+
+ private:
+  QKeySequence backShortcut_;
 };
 
 QVector<BrowserWindow *> BrowserWindow::instances_;
@@ -103,7 +116,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   auto *container = new QWidget(this);
   setCentralWidget(container);
 
-  webView_ = new WebView(profile, container);
+  webView_ = new WebView(profile, config_.backShortcut, container);
 
   overlay_ = new OmniboxOverlay(history_, domains_, &config_, container);
   overlay_->applyPalette(currentPalette_);
@@ -117,14 +130,40 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   connect(overlay_, &OmniboxOverlay::navigateRequested, this, &BrowserWindow::onOverlayNavigate);
   connect(overlay_, &OmniboxOverlay::cancelled, this, &BrowserWindow::onOverlayCancelled);
 
+  // A guarded record on urlChanged/titleChanged (rather than only in
+  // loadFinished below) still matters for single-page apps that change
+  // the URL/title via JS after a real load already succeeded (pushState,
+  // a tab-title unread-count badge, etc.) -- loadOk_ stays true across
+  // those, so they're recorded too, just never for a load that hasn't
+  // (yet, or ever) actually succeeded.
   connect(webView_->page(), &QWebEnginePage::urlChanged, this, [this](const QUrl &navUrl) {
-    history_->recordVisit(navUrl.toString(), webView_->page()->title());
+    if (loadOk_) history_->recordVisit(navUrl.toString(), webView_->page()->title());
   });
   connect(webView_->page(), &QWebEnginePage::titleChanged, this, [this](const QString &title) {
     // Hyprland group tabs (and the window decoration) read this title --
     // leave it as "Shinto" only while the gate/about:blank has no page title.
     setWindowTitle(title.isEmpty() ? QStringLiteral("Shinto") : title);
-    history_->recordVisit(webView_->url().toString(), title);
+    if (loadOk_) history_->recordVisit(webView_->url().toString(), title);
+  });
+  // The actual "was this visit real" gate: loadStarted resets it so a
+  // pending navigation is never mistaken for its predecessor's success,
+  // and loadFinished(true) is also where a search's typed query is first
+  // recorded -- paired with the URL it actually landed on, not the one
+  // Shinto originally requested (see onOverlayNavigate()), since search
+  // engines routinely rewrite/redirect that URL before it commits.
+  connect(webView_->page(), &QWebEnginePage::loadStarted, this, [this] { loadOk_ = false; });
+  connect(webView_->page(), &QWebEnginePage::loadFinished, this, [this](bool ok) {
+    loadOk_ = ok;
+    if (!ok) {
+      pendingTypedQuery_.clear();
+      return;
+    }
+    const QString finalUrl = webView_->url().toString();
+    history_->recordVisit(finalUrl, webView_->page()->title());
+    if (!pendingTypedQuery_.isEmpty()) {
+      history_->recordTyped(pendingTypedQuery_, finalUrl);
+      pendingTypedQuery_.clear();
+    }
   });
   // Only visibly does anything while the gate itself is showing (waiting
   // out onOverlayNavigate's held-open gate below) -- harmless no-op
@@ -166,6 +205,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_L), &BrowserWindow::onEditAddressShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_K), &BrowserWindow::onEditAddressShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), [this] { close(); });
+  addShortcut(config_.backShortcut, &BrowserWindow::onBackShortcut);
 
   if (url.isEmpty()) {
     enterEmpty();
@@ -212,7 +252,7 @@ void BrowserWindow::showGateOverPage() {
   overlay_->showGate(webView_->url().toString());
 }
 
-void BrowserWindow::onOverlayNavigate(const QString &url) {
+void BrowserWindow::onOverlayNavigate(const QString &url, const QString &typedQuery) {
   // Keep the gate up until the new page actually has something to paint --
   // hiding it right away would flash the previous page's last frame while
   // the new one loads, since navigation is asynchronous. state_ stays Gate
@@ -220,6 +260,10 @@ void BrowserWindow::onOverlayNavigate(const QString &url) {
   // still-visible gate correctly. The progress bar is the only feedback
   // that anything is happening during that wait.
   overlay_->setProgress(0);
+  // Picked up by the persistent loadFinished handler above once (and only
+  // if) this navigation actually succeeds -- see its comment for why this
+  // isn't just recorded right here.
+  pendingTypedQuery_ = typedQuery;
   connect(
       webView_->page(), &QWebEnginePage::loadFinished, this,
       [this](bool) {
@@ -246,6 +290,15 @@ void BrowserWindow::onNewPageShortcut() {
 void BrowserWindow::onEditAddressShortcut() {
   if (state_ == State::Empty) return;  // documented no-op on the empty gate
   showGateOverPage();
+}
+
+void BrowserWindow::onBackShortcut() {
+  // Chrome itself only treats this as browser-back when the page (not the
+  // address bar) has focus -- while the gate is up, Alt+Left there is
+  // meaningless (state_ isn't Loaded), so skip it entirely rather than
+  // navigating a page the user isn't even looking at right now.
+  if (state_ != State::Loaded) return;
+  if (webView_->history()->canGoBack()) webView_->back();
 }
 
 }  // namespace shinto

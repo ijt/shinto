@@ -56,10 +56,11 @@ class BrowserWindow : public QMainWindow {
   void relayout();
   void enterEmpty();
   void showGateOverPage();
-  void onOverlayNavigate(const QString &url);
+  void onOverlayNavigate(const QString &url, const QString &typedQuery);
   void onOverlayCancelled();
   void onNewPageShortcut();
   void onEditAddressShortcut();
+  void onBackShortcut();
 
   HistoryStore *history_;
   PopularDomains *domains_;
@@ -70,6 +71,14 @@ class BrowserWindow : public QMainWindow {
   WebView *webView_;
   OmniboxOverlay *overlay_;
   State state_ = State::Empty;
+  // Recording (both `visited` and `typed`) is deferred to loadFinished(true)
+  // -- see the constructor -- rather than done eagerly on request, so a
+  // failed navigation (DNS error, connection refused) never gets recorded,
+  // and a search's typed query gets paired with the URL it actually landed
+  // on (search engines routinely rewrite/redirect, so that can differ from
+  // the URL Shinto itself requested).
+  bool loadOk_ = false;
+  QString pendingTypedQuery_;
 
   static QVector<BrowserWindow *> instances_;
   static Palette currentPalette_;

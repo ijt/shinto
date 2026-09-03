@@ -1,5 +1,6 @@
 #include "OmniboxOverlay.h"
 
+#include <QColor>
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
@@ -8,6 +9,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMouseEvent>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
 #include <QSet>
@@ -18,12 +20,23 @@ namespace shinto {
 
 namespace {
 constexpr int kMargin = 24;
-constexpr int kMaxSuggestions = 7;
-// Leaves at least 3 slots for PopularDomains fallback suggestions even
+// A generous safety cap, not a target -- maxSuggestionRows() below almost
+// always lands well under this on any real window size; it just stops an
+// absurdly tall window (or a mis-measured row height) from turning into
+// hundreds of suggestions / an oversized domain-list query.
+constexpr int kMaxSuggestionsCap = 100;
+// Leaves at least a few slots for PopularDomains fallback suggestions even
 // when history has plenty of matches -- history is more relevant when it
 // has an answer, but a page you've visited once shouldn't crowd out every
-// domain suggestion.
-constexpr int kMaxHistorySuggestions = 4;
+// domain suggestion. Small relative to kMaxSuggestionsCap on purpose: this
+// is "how many personal results at most", not a share of the full list.
+constexpr int kMaxHistorySuggestions = 8;
+// Rough estimate of a suggestion row's height, used only to decide how
+// many rows can fit -- doesn't need to be exact (layoutInput() measures
+// the real thing once rows exist), just close enough that the list
+// roughly fills the window without leaving a large empty gap or
+// overflowing it.
+constexpr int kApproxRowHeight = 30;
 }  // namespace
 
 OmniboxOverlay::OmniboxOverlay(HistoryStore *history, PopularDomains *domains,
@@ -141,12 +154,38 @@ void OmniboxOverlay::layoutInput() {
   layoutProgressBar();
 }
 
+int OmniboxOverlay::maxSuggestionRows() const {
+  const int inputHeight = input_->sizeHint().height();
+  const int available = height() - kMargin - inputHeight - 4 - kMargin;
+  return qBound(1, available / kApproxRowHeight, kMaxSuggestionsCap);
+}
+
 void OmniboxOverlay::layoutProgressBar() {
   constexpr int kBarHeight = 3;
   progressBar_->setGeometry(0, 0, width() * progress_ / 100, kBarHeight);
 }
 
 bool OmniboxOverlay::eventFilter(QObject *obj, QEvent *event) {
+  // Hovering a row's dismiss button highlights the whole row (obj is the
+  // QToolButton -- its parent is the row).
+  if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
+    if (auto *dismiss = qobject_cast<QToolButton *>(obj)) {
+      setRowHovered(dismiss->parentWidget(), event->type() == QEvent::Enter);
+      return false;  // don't swallow it -- the button's own hover/cursor still applies
+    }
+  }
+  // Clicking a row anywhere but the dismiss button navigates there
+  // directly (obj is the row itself -- see renderSuggestions()).
+  if (event->type() == QEvent::MouseButtonRelease) {
+    auto *mouseEvent = static_cast<QMouseEvent *>(event);
+    if (mouseEvent->button() == Qt::LeftButton) {
+      const QVariant urlProp = obj->property("suggestionUrl");
+      if (urlProp.isValid()) {
+        navigateTo(urlProp.toString(), QString());
+        return true;
+      }
+    }
+  }
   if (obj != input_ || event->type() != QEvent::KeyPress) {
     return QWidget::eventFilter(obj, event);
   }
@@ -210,13 +249,18 @@ void OmniboxOverlay::applySelectionToInput() {
 void OmniboxOverlay::submit() {
   const int row = list_->currentRow();
   const bool hasPick = row >= 0 && row < items_.size() && !list_->isHidden();
-  const QString url =
-      hasPick ? items_[row].url : HistoryStore::toUrl(input_->text(), config_->searchEngineUrl);
+  if (hasPick) {
+    navigateTo(items_[row].url, QString());
+  } else {
+    navigateTo(HistoryStore::toUrl(input_->text(), config_->searchEngineUrl), input_->text());
+  }
+}
+
+void OmniboxOverlay::navigateTo(const QString &url, const QString &typedQuery) {
   if (url.isEmpty()) return;
-  history_->recordTyped(input_->text(), url);
   clearSuggestions();
   startShimmer();
-  emit navigateRequested(url);
+  emit navigateRequested(url, typedQuery);
 }
 
 namespace {
@@ -229,6 +273,18 @@ QString dedupKey(const QString &url) {
   QString key = url;
   if (key.endsWith(QLatin1Char('/'))) key.chop(1);
   return key;
+}
+
+// Linear RGB interpolation from `from` toward `to` by `t` in [0, 1] --
+// used to fade a row's label color toward the list's own background as it
+// goes further down the list. Deliberately opaque colors, not alpha/
+// QGraphicsOpacityEffect: the same *look* (dimmer = less prominent)
+// without the per-row compositing cost of real transparency, which
+// matters once the list can run to dozens of rows (maxSuggestionRows()).
+QColor blend(const QColor &from, const QColor &to, double t) {
+  const auto lerp = [&](int a, int b) { return a + int((b - a) * t); };
+  return QColor(lerp(from.red(), to.red()), lerp(from.green(), to.green()),
+                lerp(from.blue(), to.blue()));
 }
 }  // namespace
 
@@ -250,10 +306,11 @@ void OmniboxOverlay::updateSuggestions() {
     seen.insert(key);
     combined.push_back({label, url, kind});
   };
-  for (const auto &h : history_->completeVisited(text, kMaxHistorySuggestions)) {
+  const int maxTotal = maxSuggestionRows();
+  for (const auto &h : history_->completeVisited(text, qMin(kMaxHistorySuggestions, maxTotal))) {
     tryAdd(h.label, h.url, SuggestionKind::History);
   }
-  const int remaining = kMaxSuggestions - combined.size();
+  const int remaining = maxTotal - combined.size();
   if (remaining > 0) {
     for (const auto &d : domains_->complete(text, remaining)) {
       tryAdd(d.label, d.url, SuggestionKind::Popular);
@@ -265,7 +322,8 @@ void OmniboxOverlay::updateSuggestions() {
 void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
   items_ = items;
   list_->clear();
-  for (const auto &item : items_) {
+  for (int i = 0; i < items_.size(); ++i) {
+    const Suggestion &item = items_[i];
     // Every row -- History or Popular -- gets a dismiss button, so every
     // row is a real child widget rather than plain QListWidgetItem text
     // (which can't host one).
@@ -280,7 +338,25 @@ void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
 
     auto *label = new QLabel(item.label, row);
     label->setObjectName(QStringLiteral("SuggestionLabel"));
+    // Mouse events land on whichever child widget is under the cursor,
+    // not the row itself -- transparent so a click/hover anywhere on the
+    // label still reaches `row`'s own event filter below, instead of
+    // stopping at the label.
+    label->setAttribute(Qt::WA_TransparentForMouseEvents);
     rowLayout->addWidget(label, 1);
+
+    // Rows further down fade toward the list's own background -- "the
+    // top few matter most", not a wall of equally-loud text once the list
+    // fills the window (maxSuggestionRows()). Stashed on the row itself
+    // so updateSuggestionSelectionStyle() (keyboard selection) and the
+    // hover highlight below both know what to restore a label to.
+    const double t =
+        items_.size() > 1 ? double(i) / double(items_.size() - 1) : 0.0;
+    constexpr double kMaxDim = 0.7;
+    const QColor dimColor =
+        blend(QColor(currentPalette_.fg), QColor(currentPalette_.card), t * kMaxDim);
+    row->setProperty("dimColor", dimColor.name());
+    label->setStyleSheet(QStringLiteral("color: %1;").arg(dimColor.name()));
 
     auto *dismiss = new QToolButton(row);
     dismiss->setObjectName(QStringLiteral("SuggestionDismiss"));
@@ -301,6 +377,15 @@ void OmniboxOverlay::renderSuggestions(const QVector<Suggestion> &items) {
         dismissPopularSuggestion(url);
       }
     });
+    // Hovering the dismiss button highlights the whole row, so it's clear
+    // exactly which suggestion an accidental click would remove.
+    dismiss->installEventFilter(this);
+
+    // Clicking anywhere else on the row (not the dismiss button) navigates
+    // there directly, same destination Tab-selecting it and pressing
+    // Enter would reach.
+    row->setProperty("suggestionUrl", url);
+    row->installEventFilter(this);
 
     list_->setItemWidget(listItem, row);
     listItem->setSizeHint(row->sizeHint());
@@ -326,10 +411,33 @@ void OmniboxOverlay::updateSuggestionSelectionStyle() {
     if (!row) continue;
     auto *label = row->findChild<QLabel *>();
     if (!label) continue;
-    // Matches card (dark) on the accent-colored selected background --
-    // the same pairing QListWidget::item:selected uses for plain items.
-    label->setStyleSheet(i == cur ? QStringLiteral("color: %1;").arg(currentPalette_.card)
-                                   : QString());
+    if (i == cur) {
+      // Matches card (dark) on the accent-colored selected background --
+      // the same pairing QListWidget::item:selected uses for plain items.
+      label->setStyleSheet(QStringLiteral("color: %1;").arg(currentPalette_.card));
+    } else {
+      // Not just plain fg -- restore this row's own depth-based dim shade
+      // (see renderSuggestions()), so moving the keyboard selection away
+      // from a deep row doesn't suddenly brighten it back to full color.
+      label->setStyleSheet(
+          QStringLiteral("color: %1;").arg(row->property("dimColor").toString()));
+    }
+  }
+}
+
+void OmniboxOverlay::setRowHovered(QWidget *row, bool hovered) {
+  auto *label = row ? row->findChild<QLabel *>() : nullptr;
+  if (!row || !label) return;
+  if (hovered) {
+    row->setStyleSheet(
+        QStringLiteral("#SuggestionRow { background: %1; }").arg(currentPalette_.accent));
+    label->setStyleSheet(QStringLiteral("color: %1;").arg(currentPalette_.card));
+  } else {
+    row->setStyleSheet(QString());
+    // Restores this row's real state (keyboard-selected, or its own dim
+    // shade) rather than guessing -- cheap enough to just recompute all
+    // rows (renderSuggestions() already does this on every keystroke).
+    updateSuggestionSelectionStyle();
   }
 }
 
