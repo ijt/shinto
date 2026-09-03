@@ -20,10 +20,13 @@ struct ShintoConfig {
 };
 
 // Executes configLuaPath() (if it exists) and reads back recognized
-// globals. A missing file, a Lua syntax/runtime error, or a `search_engine`
-// that isn't a string or has no "%s" placeholder all fall back to
-// ShintoConfig's defaults, with a qWarning for the latter two -- a broken
-// user config should never stop Shinto from starting.
+// globals. A missing file is silently fine (nothing to report). A Lua
+// syntax/runtime error, or a `search_engine` that isn't a string or has no
+// "%s" placeholder, falls back to ShintoConfig's defaults but is reported
+// loudly -- both a qWarning and a desktop notification (see
+// reportConfigError in Config.cpp), since Shinto is normally launched with
+// no terminal in sight. A broken user config should never stop Shinto from
+// starting, but it should never fail silently either.
 ShintoConfig loadConfig();
 
 }  // namespace shinto

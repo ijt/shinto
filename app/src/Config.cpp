@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QProcess>
 #include <QUrl>
 
 extern "C" {
@@ -14,17 +15,36 @@ extern "C" {
 
 namespace shinto {
 
+namespace {
+
+// Shinto is normally launched from a Hyprland keybinding or systemd, with
+// no terminal in sight -- a qWarning alone is invisible in practice, and a
+// broken config should be loud, not a silent fallback the user never
+// learns about. Best-effort: if notify-send isn't installed or nothing
+// implements org.freedesktop.Notifications, this just doesn't pop
+// anything; qWarning still covers the terminal-launched case.
+void reportConfigError(const QString &message) {
+  qWarning() << "shinto:" << message;
+  QProcess::startDetached(
+      QStringLiteral("notify-send"),
+      {QStringLiteral("-u"), QStringLiteral("critical"), QStringLiteral("-a"),
+       QStringLiteral("Shinto"), QStringLiteral("Shinto config.lua error"), message});
+}
+
+}  // namespace
+
 ShintoConfig loadConfig() {
   ShintoConfig config;
   const QString path = configLuaPath();
   if (!QFile::exists(path)) {
-    return config;  // no config.lua yet -- defaults, nothing to warn about
+    return config;  // no config.lua yet -- nothing to report
   }
 
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
   if (luaL_dofile(L, path.toLocal8Bit().constData()) != LUA_OK) {
-    qWarning() << "shinto: error running" << path << "--" << lua_tostring(L, -1);
+    reportConfigError(QStringLiteral("%1 -- using the default search engine instead")
+                           .arg(QString::fromUtf8(lua_tostring(L, -1))));
     lua_close(L);
     return config;
   }
@@ -35,11 +55,13 @@ ShintoConfig loadConfig() {
     if (value.contains(QStringLiteral("%s"))) {
       config.searchEngineUrl = value;
     } else {
-      qWarning() << "shinto: config.lua's search_engine has no %s query "
-                     "placeholder -- ignoring, keeping the default";
+      reportConfigError(QStringLiteral("search_engine (%1) has no %s query placeholder -- "
+                                        "using the default search engine instead")
+                             .arg(value));
     }
   } else if (!lua_isnil(L, -1)) {
-    qWarning() << "shinto: config.lua's search_engine must be a string -- ignoring";
+    reportConfigError(QStringLiteral(
+        "search_engine must be a string -- using the default search engine instead"));
   }
   lua_pop(L, 1);
 
