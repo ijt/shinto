@@ -3,10 +3,16 @@
 #include <QEvent>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QResizeEvent>
+#include <QStyle>
 #include <QTimer>
-#include <QVBoxLayout>
 
 namespace shinto {
+
+namespace {
+constexpr int kMargin = 24;
+constexpr int kEmptyInputWidth = 280;
+}  // namespace
 
 OmniboxOverlay::OmniboxOverlay(HistoryStore *history, QWidget *parent)
     : QWidget(parent), history_(history) {
@@ -19,18 +25,20 @@ OmniboxOverlay::OmniboxOverlay(HistoryStore *history, QWidget *parent)
   input_ = new QLineEdit(this);
   input_->setAttribute(Qt::WA_MacShowFocusRect, false);
   input_->installEventFilter(this);
-
-  auto *layout = new QVBoxLayout(this);
-  layout->setContentsMargins(24, 24, 24, 24);
-  layout->addStretch(/*stretch=*/1);
-  layout->addWidget(input_);
+  // No QLayout -- position is managed by hand in layoutInput(), since the
+  // two modes place it completely differently (top-left, unboxed, in the
+  // empty gate; a full-width bottom bar while editing).
 }
 
 void OmniboxOverlay::applyPalette(const Palette &palette) { setStyleSheet(palette.toQss()); }
 
 void OmniboxOverlay::showEmpty() {
   emptyMode_ = true;
+  input_->setProperty("emptyMode", true);
+  input_->style()->unpolish(input_);
+  input_->style()->polish(input_);
   input_->clear();
+  layoutInput();
   show();
   raise();
   input_->setFocus();
@@ -38,7 +46,11 @@ void OmniboxOverlay::showEmpty() {
 
 void OmniboxOverlay::showEditing(const QString &currentUrl) {
   emptyMode_ = false;
+  input_->setProperty("emptyMode", false);
+  input_->style()->unpolish(input_);
+  input_->style()->polish(input_);
   input_->setText(currentUrl);
+  layoutInput();
   show();
   raise();
   input_->setFocus();
@@ -50,6 +62,24 @@ void OmniboxOverlay::showEditing(const QString &currentUrl) {
 }
 
 void OmniboxOverlay::hideOverlay() { hide(); }
+
+void OmniboxOverlay::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  layoutInput();
+}
+
+void OmniboxOverlay::layoutInput() {
+  const int h = input_->sizeHint().height();
+  if (emptyMode_) {
+    // Just a caret at the top-left -- a modest fixed width to type into,
+    // not the full window.
+    const int w = qMin(kEmptyInputWidth, qMax(0, width() - 2 * kMargin));
+    input_->setGeometry(kMargin, kMargin, w, h);
+  } else {
+    const int w = qMax(0, width() - 2 * kMargin);
+    input_->setGeometry(kMargin, qMax(kMargin, height() - kMargin - h), w, h);
+  }
+}
 
 bool OmniboxOverlay::eventFilter(QObject *obj, QEvent *event) {
   if (obj != input_ || event->type() != QEvent::KeyPress) {
@@ -78,8 +108,7 @@ void OmniboxOverlay::submit() {
 }
 
 int OmniboxOverlay::preferredEditingHeight() const {
-  const auto margins = layout()->contentsMargins();
-  return margins.top() + margins.bottom() + input_->sizeHint().height();
+  return 2 * kMargin + input_->sizeHint().height();
 }
 
 }  // namespace shinto

@@ -66,7 +66,12 @@ QString Palette::toQss() const {
              " background: transparent; color: #ffffff; border: none;"
              " border-bottom: 2px solid %4; border-radius: 0; padding: 8px 4px;"
              " font-family: %5; font-size: 15px; selection-background-color: %6; }\n"
-             "#OmniboxOverlay QLineEdit:focus { border-bottom: 2px solid %6; }\n")
+             "#OmniboxOverlay QLineEdit:focus { border-bottom: 2px solid %6; }\n"
+             // Empty gate: no visible field at all, just the caret --
+             // border-bottom overridden back off, no focus outline either.
+             "#OmniboxOverlay QLineEdit[emptyMode=\"true\"],"
+             "#OmniboxOverlay QLineEdit[emptyMode=\"true\"]:focus {"
+             " border-bottom: none; padding: 0; }\n")
       .arg(bg, card, fg, muted, font, accent);
 }
 

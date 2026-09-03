@@ -1,7 +1,8 @@
 // The native omnibox: a widget drawn on top of a BrowserWindow's
-// QWebEngineView. Two modes off one flag: full-screen "empty gate" (a new
-// window) and a thin "edit in place" bar over the current page (Ctrl+L).
-// Just a text input -- no suggestion dropdown.
+// QWebEngineView. Two modes off one flag: a fresh window's empty gate --
+// just a caret at the top-left, no visible field -- and a thin "edit in
+// place" bar over the current page (Ctrl+L), which looks like an address
+// bar. Just a text input -- no suggestion dropdown.
 //
 // Unlike the old gate, this is never a navigable URL -- Escape simply hides
 // it, since the underlying page was never touched.
@@ -13,6 +14,7 @@
 #include "ThemeLoader.h"
 
 class QLineEdit;
+class QResizeEvent;
 
 namespace shinto {
 
@@ -24,7 +26,8 @@ class OmniboxOverlay : public QWidget {
 
   void applyPalette(const Palette &palette);
 
-  // Full-screen empty-gate mode: clears the input, focuses it.
+  // Empty-gate mode: just a caret at the top-left, no visible field --
+  // clears the input, focuses it.
   void showEmpty();
 
   // Edit-in-place mode: prefills with `currentUrl`, whole address selected
@@ -51,9 +54,11 @@ class OmniboxOverlay : public QWidget {
 
  protected:
   bool eventFilter(QObject *obj, QEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
 
  private:
   void submit();
+  void layoutInput();
 
   HistoryStore *history_;
   QLineEdit *input_;
