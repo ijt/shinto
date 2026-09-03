@@ -18,6 +18,7 @@ SHINTO_BIN = sys.argv[2] if len(sys.argv) > 2 else "shinto"
 PORT = int(os.environ.get("SHINTO_PORT", "18764"))
 PORT_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "shinto.port")
 PENDING: dict[str, str] = {}
+DEBUG: list[str] = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -38,6 +39,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = unquote(urlparse(self.path).path)
+        if path == "/debug":
+            if not self._from_extension() and not self._loopback():
+                self.send_error(403)
+                return
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            raw = self.rfile.read(min(length, 4096)) if length else b""
+            if raw:
+                try:
+                    DEBUG.append(raw.decode()[:500])
+                except UnicodeDecodeError:
+                    DEBUG.append(repr(raw[:200]))
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if path not in ("/open", "/stash") or not self._from_extension():
             self.send_error(403)
             return
@@ -103,6 +119,18 @@ class Handler(BaseHTTPRequestHandler):
             token = parse_qs(parsed.query).get("n", [""])[0]
             url = PENDING.pop(token, "") if token else ""
             data = json.dumps({"url": url}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if path == "/debug":
+            if not self._loopback():
+                self.send_error(403)
+                return
+            data = json.dumps(DEBUG[-50:]).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))

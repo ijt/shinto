@@ -1,5 +1,11 @@
 "use strict";
 
+fetch("http://127.0.0.1:18764/debug", {
+  method: "POST",
+  cache: "no-store",
+  body: "sw-boot",
+}).catch(() => {});
+
 const moving = new Set();
 
 function skipWindow(win) {
@@ -64,14 +70,17 @@ function gateUrl(url) {
 }
 
 async function openNewPage() {
+  openGateAt = Date.now();
   try {
-    await fetch("http://127.0.0.1:18764/open", {
+    const r = await fetch("http://127.0.0.1:18764/open", {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
+    dbg("openNewPage status=" + r.status);
   } catch (err) {
+    dbg("openNewPage fail " + err);
     console.warn("shinto: open", err);
   }
 }
@@ -117,14 +126,17 @@ function isSpare(url) {
 }
 
 function isChromiumNewTab(url) {
-  if (typeof url !== "string") return false;
-  if (!url || url === "about:blank") return "wait";
+  if (typeof url !== "string" || !url) return false;
+  // Never treat about:blank as NTP — our --app gates pass through blank while loading.
   if (url.startsWith("chrome://newtab") || url.startsWith("chrome://new-tab-page")) return true;
-  if (url.startsWith("chrome-extension://") && url.includes("newtab")) return true;
+  // Ctrl+N in --app mode opens a window under the extension id (pencil bar).
+  // Spare/gate are loopback now — no visible UI should be chrome-extension://.
+  if (url.startsWith("chrome-extension://")) return true;
   return false;
 }
 
 const replacingWindows = new Set();
+let openGateAt = 0;
 
 async function reclaimNewTabWindow(winId) {
   if (replacingWindows.has(winId)) return;
@@ -136,34 +148,48 @@ async function reclaimNewTabWindow(winId) {
     return;
   }
   replacingWindows.delete(winId);
+  // Content script may already have asked for a gate; avoid spawning two.
+  if (Date.now() - openGateAt < 800) return;
   openNewPage();
 }
 
+function dbg(msg) {
+  fetch("http://127.0.0.1:18764/debug", {
+    method: "POST",
+    cache: "no-store",
+    body: String(msg),
+  }).catch(() => {});
+}
+
 async function replaceChromiumNewTab(win) {
-  for (let i = 0; i < 25; i++) {
+  dbg("onCreated type=" + win.type + " id=" + win.id);
+  for (let i = 0; i < 30; i++) {
     let tabs;
     try {
       tabs = await chrome.tabs.query({ windowId: win.id });
-    } catch {
+    } catch (err) {
+      dbg("query fail " + err);
       return;
     }
     const tab = tabs[0];
     if (!tab) {
-      await new Promise((r) => setTimeout(r, 40));
+      await new Promise((r) => setTimeout(r, 50));
       continue;
     }
     const url = tab.pendingUrl || tab.url || "";
+    dbg("i=" + i + " type=" + win.type + " url=" + url);
     if (isSpare(url) || isOurGate(url)) return;
     if (/^https?:/i.test(url) && !url.includes("127.0.0.1") && !url.includes("localhost")) {
       return;
     }
-    const kind = isChromiumNewTab(url);
-    if (kind === true || (kind === "wait" && i >= 8)) {
+    if (isChromiumNewTab(url)) {
+      dbg("reclaim " + url);
       await reclaimNewTabWindow(win.id);
       return;
     }
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((r) => setTimeout(r, 50));
   }
+  dbg("gave up on window " + win.id);
 }
 
 chrome.tabs.onCreated.addListener((tab) => {
@@ -172,8 +198,9 @@ chrome.tabs.onCreated.addListener((tab) => {
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (!info.url) return;
+  dbg("tabUpdated " + info.url);
   if (isSpare(info.url) || isOurGate(info.url)) return;
-  if (isChromiumNewTab(info.url) !== true) return;
+  if (!isChromiumNewTab(info.url)) return;
   reclaimNewTabWindow(tab.windowId);
 });
 
@@ -183,6 +210,19 @@ chrome.windows.onCreated.addListener((win) => {
   // Chromium Ctrl+N opens a stock/extension NTP with the Shinto+pencil bar.
   replaceChromiumNewTab(win);
 });
+
+// windows.onCreated is unreliable for --app windows. Poll and kill pencil NTPs.
+setInterval(() => {
+  chrome.tabs.query({}).then((tabs) => {
+    for (const tab of tabs) {
+      const url = tab.url || tab.pendingUrl || "";
+      if (!url || isSpare(url) || isOurGate(url)) continue;
+      if (!isChromiumNewTab(url)) continue;
+      dbg("poll reclaim " + url + " win=" + tab.windowId);
+      reclaimNewTabWindow(tab.windowId);
+    }
+  });
+}, 400);
 
 chrome.runtime.onInstalled.addListener(async () => {
   const wins = await chrome.windows.getAll({ populate: true });

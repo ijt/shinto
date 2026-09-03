@@ -42,7 +42,18 @@ if (location.protocol !== "chrome-extension:" && window === window.top) {
       if (isNewWindowShortcut(event)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        chrome.runtime.sendMessage({ type: "new-page" });
+        fetch("http://127.0.0.1:18764/debug", {
+          method: "POST",
+          cache: "no-store",
+          body: "ctrl-n from " + location.href,
+        }).catch(() => {});
+        chrome.runtime.sendMessage({ type: "new-page" }, () => {
+          fetch("http://127.0.0.1:18764/debug", {
+            method: "POST",
+            cache: "no-store",
+            body: "new-page sent err=" + (chrome.runtime.lastError && chrome.runtime.lastError.message),
+          }).catch(() => {});
+        });
       }
     },
     true

@@ -16,7 +16,7 @@ NEWTAB_ID="badlilcpkdpfckbkeaejdnpinhejkiao"
 LOCAL_PORT="${SHINTO_PORT:-18764}"
 LOCAL_NEWTAB="http://127.0.0.1:${LOCAL_PORT}/newtab.html"
 # Keep-alive must be the same origin as the gate. chrome-extension:// spare
-# makes every later window "out of scope" → Shinto+pencil bar.
+# makes every later window "out of scope"
 SPARE_URL="http://127.0.0.1:${LOCAL_PORT}/spare.html"
 
 CHROMIUM_BIN="${SHINTO_CHROMIUM:-/usr/lib/chromium/chromium}"
