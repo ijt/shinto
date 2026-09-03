@@ -93,10 +93,10 @@ bool OmniboxOverlay::eventFilter(QObject *obj, QEvent *event) {
       moveSelection(-1);
       return true;
     case Qt::Key_Tab:
-      if (!items_.isEmpty()) {
-        if (list_->currentRow() < 0) list_->setCurrentRow(0);
-        applySelectionToInput();
-      }
+      moveSelection(1);
+      return true;
+    case Qt::Key_Backtab:  // Shift+Tab
+      moveSelection(-1);
       return true;
     case Qt::Key_Escape:
       if (!items_.isEmpty()) {
