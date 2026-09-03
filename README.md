@@ -92,6 +92,18 @@ Hyprland groups (these are the tabs):
 | `Super + Alt + G` | Pull this window out of the group |
 | `Super + G` again | Disband the group |
 
+## Configuration
+
+Shinto reads `~/.config/shinto/config.lua` (a real Lua file, executed with an embedded Lua 5.4 interpreter — nothing to restart, just start a fresh daemon) on startup. Currently one setting:
+
+```lua
+-- Search fallback for whatever the omnibox doesn't recognize as a URL.
+-- "%s" is replaced with the percent-encoded query. Defaults to DuckDuckGo.
+search_engine = "https://www.google.com/search?q=%s"
+```
+
+The file is optional — no `config.lua` (or a broken one) just falls back to the defaults, with a warning on stderr for a broken one.
+
 ## Notes
 
 - Dedicated QtWebEngine profile at `~/.local/share/shinto/profile/webengine` — your main Chromium logins are untouched.

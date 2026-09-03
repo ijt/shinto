@@ -6,7 +6,6 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUrl>
-#include <QUrlQuery>
 
 #include "Shinto.h"
 
@@ -80,7 +79,7 @@ bool HistoryStore::isInternalUrl(const QString &url) {
          url.startsWith(QStringLiteral("qrc:")) || url.startsWith(QStringLiteral("about:"));
 }
 
-QString HistoryStore::toUrl(const QString &raw) {
+QString HistoryStore::toUrl(const QString &raw, const QString &searchEngineUrl) {
   const QString q = raw.trimmed();
   if (q.isEmpty()) return {};
 
@@ -96,11 +95,9 @@ QString HistoryStore::toUrl(const QString &raw) {
   if (kIpv4.match(q).hasMatch()) return QStringLiteral("http://") + q;
   if (kBareDomain.match(q).hasMatch() && !q.contains(' ')) return QStringLiteral("https://") + q;
 
-  QUrl search(QStringLiteral("https://duckduckgo.com/"));
-  QUrlQuery params;
-  params.addQueryItem("q", q);
-  search.setQuery(params);
-  return search.toString();
+  QString url = searchEngineUrl;
+  url.replace(QStringLiteral("%s"), QString::fromLatin1(QUrl::toPercentEncoding(q)));
+  return url;
 }
 
 }  // namespace shinto

@@ -13,6 +13,7 @@
 #include <QVector>
 #include <QWidget>
 
+#include "Config.h"
 #include "HistoryStore.h"
 #include "PopularDomains.h"
 #include "ThemeLoader.h"
@@ -29,7 +30,8 @@ class OmniboxOverlay : public QWidget {
   Q_OBJECT
 
  public:
-  OmniboxOverlay(HistoryStore *history, const PopularDomains *domains, QWidget *parent = nullptr);
+  OmniboxOverlay(HistoryStore *history, const PopularDomains *domains, const ShintoConfig *config,
+                 QWidget *parent = nullptr);
 
   void applyPalette(const Palette &palette);
 
@@ -50,7 +52,8 @@ class OmniboxOverlay : public QWidget {
 
  signals:
   // The user submitted a destination (typed text resolved via
-  // HistoryStore::toUrl, or picked a suggestion).
+  // HistoryStore::toUrl (using config_->searchEngineUrl), or picked a
+  // suggestion).
   void navigateRequested(const QString &url);
   // The user backed out (Escape) without navigating.
   void cancelled();
@@ -74,6 +77,7 @@ class OmniboxOverlay : public QWidget {
 
   HistoryStore *history_;
   const PopularDomains *domains_;
+  const ShintoConfig *config_;
   QLineEdit *input_;
   QListWidget *list_;
   QWidget *progressBar_;

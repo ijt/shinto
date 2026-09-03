@@ -31,9 +31,11 @@ class HistoryStore : public QObject {
 
   // Heuristic URL-or-search resolution: has a scheme -> as-is; "//" -> https:;
   // "localhost[:port]/..." or an IPv4 host -> http://; a bare "word.word"
-  // with no spaces -> https://; otherwise -> a DuckDuckGo search. Mirrors
-  // toUrl()/completeToUrl() from the old extension/background.js verbatim.
-  static QString toUrl(const QString &raw);
+  // with no spaces -> https://; otherwise -> `searchEngineUrl` with "%s"
+  // replaced by the percent-encoded query (see Config.h; defaults to
+  // DuckDuckGo). Mirrors toUrl()/completeToUrl() from the old
+  // extension/background.js verbatim, aside from the configurable engine.
+  static QString toUrl(const QString &raw, const QString &searchEngineUrl);
 
  private:
   static bool isInternalUrl(const QString &url);

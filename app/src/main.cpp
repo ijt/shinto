@@ -12,6 +12,7 @@
 #include <QWebEngineProfile>
 
 #include "BrowserWindow.h"
+#include "Config.h"
 #include "HistoryStore.h"
 #include "PopularDomains.h"
 #include "Shinto.h"
@@ -140,13 +141,18 @@ int main(int argc, char *argv[]) {
     qWarning() << "shinto: continuing without persistent typed/visited history";
   }
   const shinto::PopularDomains domains;
+  // Loaded once at startup, same as domains/history -- config.lua changes
+  // pick up on the next `shinto` invocation that starts a fresh daemon
+  // (there's no live-reload command for it the way `shinto theme` has one
+  // for colors.toml).
+  const shinto::ShintoConfig config = shinto::loadConfig();
 
   shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette());
 
   shinto::SingletonServer server;
   QObject::connect(&server, &shinto::SingletonServer::openRequested,
-                    [profile, &history, &domains](const QString &openUrl) {
-                      shinto::BrowserWindow::spawn(profile, &history, &domains, openUrl);
+                    [profile, &history, &domains, &config](const QString &openUrl) {
+                      shinto::BrowserWindow::spawn(profile, &history, &domains, &config, openUrl);
                     });
   QObject::connect(&server, &shinto::SingletonServer::themeReloadRequested,
                     [] { shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette()); });
@@ -162,7 +168,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (!forceDaemon) {
-    shinto::BrowserWindow::spawn(profile, &history, &domains, url);
+    shinto::BrowserWindow::spawn(profile, &history, &domains, &config, url);
   }
   // else: `--daemon` (the systemd unit) starts with zero windows, warm and
   // waiting for the first Super+Shift+Return handoff.

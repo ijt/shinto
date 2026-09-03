@@ -38,6 +38,18 @@ inline QString colorsTomlPath() {
   return QDir::homePath() + "/.local/state/omarchy/current/theme/colors.toml";
 }
 
+// $XDG_CONFIG_HOME/shinto/config.lua (~/.config/shinto/config.lua by
+// default) -- the user-editable Lua config file (search engine, etc; see
+// Config.h). Unlike colorsTomlPath() this one is Shinto's own, not
+// Omarchy-managed, and it's fine for it not to exist yet.
+inline QString configLuaPath() {
+  QString base = QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME"));
+  if (base.isEmpty()) {
+    base = QDir::homePath() + "/.config";
+  }
+  return base + "/shinto/config.lua";
+}
+
 // $XDG_RUNTIME_DIR/shinto.sock — the singleton handoff socket.
 inline QString singletonSocketPath() {
   QString runtime = QString::fromLocal8Bit(qgetenv("XDG_RUNTIME_DIR"));

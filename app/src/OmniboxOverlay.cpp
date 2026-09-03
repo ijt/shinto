@@ -18,8 +18,8 @@ constexpr int kMaxSuggestions = 7;
 }  // namespace
 
 OmniboxOverlay::OmniboxOverlay(HistoryStore *history, const PopularDomains *domains,
-                                QWidget *parent)
-    : QWidget(parent), history_(history), domains_(domains) {
+                                const ShintoConfig *config, QWidget *parent)
+    : QWidget(parent), history_(history), domains_(domains), config_(config) {
   setObjectName(QStringLiteral("OmniboxOverlay"));
   // A plain QWidget doesn't paint its stylesheet background by default --
   // without this, the page underneath shows through everywhere except
@@ -196,7 +196,8 @@ void OmniboxOverlay::applySelectionToInput() {
 void OmniboxOverlay::submit() {
   const int row = list_->currentRow();
   const bool hasPick = row >= 0 && row < items_.size() && !list_->isHidden();
-  const QString url = hasPick ? items_[row].url : HistoryStore::toUrl(input_->text());
+  const QString url =
+      hasPick ? items_[row].url : HistoryStore::toUrl(input_->text(), config_->searchEngineUrl);
   if (url.isEmpty()) return;
   history_->recordTyped(input_->text(), url);
   clearSuggestions();
