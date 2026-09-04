@@ -29,6 +29,7 @@ qt_add_executable(shinto-bin
   src/PopularDomains.cpp
   src/OmniboxOverlay.cpp
   src/FindBar.cpp
+  src/ReadlineEditing.cpp
   src/BrowserWindow.cpp
   src/SingletonServer.cpp
   src/SingletonClient.cpp

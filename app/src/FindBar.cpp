@@ -6,6 +6,8 @@
 #include <QLineEdit>
 #include <QToolButton>
 
+#include "ReadlineEditing.h"
+
 namespace shinto {
 
 FindBar::FindBar(QWidget *parent) : QWidget(parent) {
@@ -95,10 +97,26 @@ void FindBar::setMatchCount(int active, int total) {
 }
 
 bool FindBar::eventFilter(QObject *obj, QEvent *event) {
+  // See OmniboxOverlay::eventFilter's matching comment: Ctrl+K/Ctrl+T/
+  // Ctrl+W/Ctrl+F are also window-level QShortcuts, and reclaiming them
+  // here while this box has focus is safe for the same reason -- each is
+  // a no-op in that state anyway (they'd just refocus/reopen something
+  // that's already open, or -- Ctrl+F -- reopen the find bar itself).
+  if (obj == input_ && event->type() == QEvent::ShortcutOverride) {
+    auto *key = static_cast<QKeyEvent *>(event);
+    if (isReadlineEditKey(key)) {
+      key->accept();
+      return true;
+    }
+  }
   if (obj != input_ || event->type() != QEvent::KeyPress) {
     return QWidget::eventFilter(obj, event);
   }
   auto *key = static_cast<QKeyEvent *>(event);
+  if (isReadlineEditKey(key)) {
+    applyReadlineEdit(input_, key);
+    return true;
+  }
   switch (key->key()) {
     case Qt::Key_Escape:
       hideBar();
