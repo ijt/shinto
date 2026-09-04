@@ -161,6 +161,18 @@ void HistoryStore::forgetVisited(const QString &url) {
   if (!query.exec()) {
     qWarning() << "shinto: forgetVisited failed:" << query.lastError().text();
   }
+  // Also drop any `typed` row for this exact URL -- completeVisited() joins
+  // FROM visited, so an orphaned typed row is harmless for suggestions, but
+  // it's still stale data left behind by a dismiss that's supposed to mean
+  // "forget this" (confirmed concretely: funkyimg.com/x.co rows surviving
+  // in `typed` after being visited, independent of the `visited` deletion
+  // above -- see the history.sqlite cleanup that prompted this fix).
+  QSqlQuery typedQuery(db_);
+  typedQuery.prepare(QStringLiteral("DELETE FROM typed WHERE url = :url"));
+  typedQuery.bindValue(":url", url);
+  if (!typedQuery.exec()) {
+    qWarning() << "shinto: forgetVisited (typed) failed:" << typedQuery.lastError().text();
+  }
 }
 
 bool HistoryStore::isInternalUrl(const QString &url) {
