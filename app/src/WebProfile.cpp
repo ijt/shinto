@@ -1,11 +1,16 @@
 #include "WebProfile.h"
 
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QWebEngineDownloadRequest>
 #include <QWebEngineProfile>
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
 
+#include "Notify.h"
 #include "Shinto.h"
 
 namespace shinto {
@@ -156,6 +161,63 @@ void installWebAuthnCapabilityShim(QWebEngineProfile *profile) {
   profile->scripts()->insert(script);
 }
 
+// Nothing in Shinto connected to QWebEngineProfile::downloadRequested, and
+// an unhandled download just sits forever in the DownloadRequested state --
+// nothing is written to disk, and there's no error either, so a user
+// clicking a download link (confirmed concretely: a .dmg/.exe/.tar.gz from
+// jetbrains.com) sees literally nothing happen and has no way to tell
+// whether it worked. Shinto has no download-manager UI to show progress in
+// instead, so this accepts every download straight into the platform
+// Downloads folder and narrates start/finish/failure via desktop
+// notification (see Notify.h) -- the same "no terminal in sight" reasoning
+// that already justified one for config errors.
+void installDownloadHandler(QWebEngineProfile *profile) {
+  QObject::connect(
+      profile, &QWebEngineProfile::downloadRequested, profile,
+      [](QWebEngineDownloadRequest *download) {
+        if (!download) return;
+
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        QDir().mkpath(dir);
+        download->setDownloadDirectory(dir);
+
+        // QWebEngineDownloadRequest doesn't dedupe filenames the way
+        // Chromium's own save-as dialog would -- a second download of the
+        // same name would silently clobber the first one without this.
+        QString name = download->suggestedFileName();
+        if (name.isEmpty()) name = QStringLiteral("download");
+        const QFileInfo info(name);
+        const QString base = info.completeBaseName();
+        const QString ext = info.suffix();
+        QString candidate = name;
+        for (int n = 1; QFile::exists(dir + QLatin1Char('/') + candidate); ++n) {
+          candidate = ext.isEmpty() ? QStringLiteral("%1 (%2)").arg(base).arg(n)
+                                     : QStringLiteral("%1 (%2).%3").arg(base).arg(n).arg(ext);
+        }
+        download->setDownloadFileName(candidate);
+        download->accept();
+
+        notify(QStringLiteral("Download started"), candidate);
+
+        QObject::connect(
+            download, &QWebEngineDownloadRequest::stateChanged, download,
+            [download, candidate](QWebEngineDownloadRequest::DownloadState state) {
+              switch (state) {
+                case QWebEngineDownloadRequest::DownloadCompleted:
+                  notify(QStringLiteral("Download complete"), candidate);
+                  break;
+                case QWebEngineDownloadRequest::DownloadInterrupted:
+                  notify(QStringLiteral("Download failed"),
+                         candidate + QStringLiteral(": ") + download->interruptReasonString(),
+                         /*critical=*/true);
+                  break;
+                default:
+                  break;
+              }
+            });
+      });
+}
+
 }  // namespace
 
 QWebEngineProfile *createSharedProfile(QObject *parent) {
@@ -183,6 +245,7 @@ QWebEngineProfile *createSharedProfile(QObject *parent) {
 
   installScrollbarHidingScript(profile);
   installWebAuthnCapabilityShim(profile);
+  installDownloadHandler(profile);
 
   return profile;
 }
