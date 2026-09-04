@@ -22,6 +22,7 @@ pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua5.4)
 
 qt_add_executable(shinto-bin
   src/main.cpp
+  src/Notify.cpp
   src/WebProfile.cpp
   src/ThemeLoader.cpp
   src/Config.cpp

@@ -2,7 +2,6 @@
 
 #include <QDebug>
 #include <QFile>
-#include <QProcess>
 #include <QUrl>
 
 extern "C" {
@@ -11,24 +10,18 @@ extern "C" {
 #include <lualib.h>
 }
 
+#include "Notify.h"
 #include "Shinto.h"
 
 namespace shinto {
 
 namespace {
 
-// Shinto is normally launched from a Hyprland keybinding or systemd, with
-// no terminal in sight -- a qWarning alone is invisible in practice, and a
-// broken config should be loud, not a silent fallback the user never
-// learns about. Best-effort: if notify-send isn't installed or nothing
-// implements org.freedesktop.Notifications, this just doesn't pop
-// anything; qWarning still covers the terminal-launched case.
+// A broken config should be loud, not a silent fallback the user never
+// learns about -- see Notify.h for why this is more than a qWarning.
 void reportConfigError(const QString &message) {
   qWarning() << "shinto:" << message;
-  QProcess::startDetached(
-      QStringLiteral("notify-send"),
-      {QStringLiteral("-u"), QStringLiteral("critical"), QStringLiteral("-a"),
-       QStringLiteral("Shinto"), QStringLiteral("Shinto config.lua error"), message});
+  notify(QStringLiteral("Shinto config.lua error"), message, /*critical=*/true);
 }
 
 }  // namespace
