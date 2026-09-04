@@ -65,12 +65,22 @@ class BrowserWindow : public QMainWindow {
  private:
   enum class State { Empty, Loaded, Gate };
 
+  // Shared by spawn() and spawnForRequest() -- both need the same
+  // registration/sizing/show() boilerplate, but a popup shouldn't show the
+  // empty-gate's location bar over its blank initial frame (there's no
+  // user-typed destination to show there; request.openIn() is about to
+  // navigate it to a real URL the user never typed) -- see
+  // spawnForRequest()'s own comment for the concrete complaint this fixes.
+  static BrowserWindow *spawnInternal(QWebEngineProfile *profile, HistoryStore *history,
+                                       PopularDomains *domains, const QString &url,
+                                       bool showEmptyGate);
+
   BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, PopularDomains *domains,
-                const QString &url);
+                const QString &url, bool showEmptyGate);
 
   void relayout();
   void relayoutFindBar();
-  void enterEmpty();
+  void enterEmpty(bool showGate);
   void showGateOverPage();
   void onOverlayNavigate(const QString &url, const QString &typedQuery);
   void onOverlayCancelled();

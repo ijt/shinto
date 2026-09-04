@@ -96,7 +96,13 @@ Palette BrowserWindow::currentPalette_;
 
 BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *history,
                                      PopularDomains *domains, const QString &url) {
-  auto *win = new BrowserWindow(profile, history, domains, url);
+  return spawnInternal(profile, history, domains, url, /*showEmptyGate=*/true);
+}
+
+BrowserWindow *BrowserWindow::spawnInternal(QWebEngineProfile *profile, HistoryStore *history,
+                                             PopularDomains *domains, const QString &url,
+                                             bool showEmptyGate) {
+  auto *win = new BrowserWindow(profile, history, domains, url, showEmptyGate);
   win->setAttribute(Qt::WA_DeleteOnClose);
   instances_.push_back(win);
   win->resize(1200, 800);
@@ -107,16 +113,27 @@ BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *hi
 BrowserWindow *BrowserWindow::spawnForRequest(QWebEngineProfile *profile, HistoryStore *history,
                                                PopularDomains *domains,
                                                QWebEngineNewWindowRequest &request) {
-  BrowserWindow *win = spawn(profile, history, domains, QString());
+  // showEmptyGate=false: a popup has no user-typed destination to show in
+  // a location bar -- it's about to be navigated (via openIn() below) to
+  // wherever the opener's window.open()/link pointed, which the user never
+  // typed anywhere. Showing the gate here (even briefly, blank, before the
+  // real page loads) reads as "type a URL", which is actively misleading
+  // for a window that's already mid-navigation on the caller's behalf
+  // (reported concretely: the location bar showing while a link-opened
+  // window was just loading).
+  BrowserWindow *win = spawnInternal(profile, history, domains, QString(),
+                                      /*showEmptyGate=*/false);
   // openIn() must be called before this handler (spawnForRequest is
   // called synchronously from it) returns, or Qt rejects the window-open
   // request outright -- see its own doc comment for why this, not
   // request.requestedUrl(), is what actually fixes OAuth popups.
   request.openIn(win->webView_->page());
-  // spawn(..., QString()) took the Empty path (enterEmpty(), gate showing
-  // over about:blank) since there's no URL to hand it yet at this point --
-  // openIn() just started the real navigation, so drive state_/the gate
-  // the same way onOverlayNavigate() does for an ordinary navigation.
+  // spawnInternal(..., QString(), false) took the Empty path (enterEmpty(),
+  // gate left hidden over about:blank) since there's no URL to hand it yet
+  // at this point -- openIn() just started the real navigation, so drive
+  // state_ the same way onOverlayNavigate() does for an ordinary
+  // navigation (hideOverlay() here is a no-op given the gate was never
+  // shown, but keeps this handler identical in shape to that one).
   connect(
       win->webView_->page(), &QWebEnginePage::loadFinished, win,
       [win](bool) {
@@ -137,7 +154,7 @@ void BrowserWindow::applyPaletteToAll(const Palette &palette) {
 }
 
 BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
-                              PopularDomains *domains, const QString &url)
+                              PopularDomains *domains, const QString &url, bool showEmptyGate)
     : history_(history), domains_(domains), config_(loadConfig()) {
   setWindowTitle(QStringLiteral("Shinto"));
 
@@ -267,7 +284,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), &BrowserWindow::onFindShortcut);
 
   if (url.isEmpty()) {
-    enterEmpty();
+    enterEmpty(showEmptyGate);
   } else {
     state_ = State::Loaded;
     webView_->setUrl(QUrl(url));
@@ -299,7 +316,7 @@ void BrowserWindow::relayoutFindBar() {
   findBar_->setGeometry(centralWidget()->width() - w - kMargin, kMargin, w, hint.height());
 }
 
-void BrowserWindow::enterEmpty() {
+void BrowserWindow::enterEmpty(bool showGate) {
   state_ = State::Empty;
   setWindowTitle(QStringLiteral("Shinto"));
   relayout();
@@ -309,9 +326,16 @@ void BrowserWindow::enterEmpty() {
   // caused via isolated testing: reproduced with a bare idle
   // QWebEngineView, gone once it was given something, anything, to load).
   // about:blank gives the compositor a real frame to commit while still
-  // looking empty -- the gate fully covers it either way.
+  // looking empty -- needed regardless of showGate, since the gate (when
+  // shown at all) fully covers it either way.
   webView_->setUrl(QUrl(QStringLiteral("about:blank")));
-  overlay_->showGate();
+  // A freshly-opened window with nothing typed into it yet (Ctrl+T/Ctrl+N)
+  // wants the gate so there's somewhere to type; a popup a link/window.open()
+  // just opened (spawnForRequest(), showGate=false) is about to be
+  // navigated to a real URL the user never typed, so showing a location
+  // bar over it -- even blank, even briefly -- would misrepresent it as
+  // "type here" instead of "loading".
+  if (showGate) overlay_->showGate();
 }
 
 void BrowserWindow::showGateOverPage() {
