@@ -1,5 +1,7 @@
 # Shinto
 
+*Chrome has too much chrome; Zen isn't zen enough.*
+
 A page viewer for Omarchy. One window is one document. Hyprland is the tab bar.
 
 Zen reimplements workspaces, split view, and tabs inside the browser because most desktops are bad at those. Omarchy is not. Shinto is the shrine: a gate you walk through (the overlay omnibox) and then it is gone.
