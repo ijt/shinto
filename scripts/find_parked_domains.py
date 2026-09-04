@@ -110,59 +110,79 @@ def check_domain(domain):
     # suggestion as a parked one (arguably more so) -- but a one-time
     # snapshot check risks mistaking a transient network blip for a truly
     # dead domain, so retry once before giving up on it.
+    #
+    # Catches Exception broadly, not just requests.RequestException: a
+    # 100k-domain scan runs into arbitrary malformed input eventually --
+    # confirmed concretely, a redirect to a percent-encoded Cyrillic
+    # (.рф) hostname raised urllib3.exceptions.LocationParseError, which
+    # isn't a RequestException subclass, and crashed the whole scan
+    # rather than just failing that one domain. One bad domain should
+    # never take the other 99999 down with it.
     try:
         resp = _fetch(domain)
-    except requests.RequestException:
+    except Exception:
         try:
             resp = _fetch(domain)
-        except requests.RequestException as e:
+        except Exception as e:
             return {"domain": domain, "status": "error", "detail": str(e)[:200]}
 
-    # Every hop, not just the final one -- a chain can pass through a
-    # known parking/marketplace host (afternic.com) on its way to a final
-    # host that isn't recognized, or that bot-blocks the request outright
-    # (confirmed: x.co -> afternic.com -> forsale.godaddy.com, the last
-    # hop returning Akamai's "Access Denied" instead of real content --
-    # checking only resp.url would have missed the afternic.com hop
-    # entirely).
-    hop_urls = [r.url for r in resp.history] + [resp.url]
-    for hop_url in hop_urls:
-        parsed_hop = urlparse(hop_url)
-        host = parsed_hop.hostname or ""
-        for parking_domain in PARKING_REDIRECT_DOMAINS:
-            if host == parking_domain or host.endswith("." + parking_domain):
-                return {"domain": domain, "status": "parked", "reason": f"redirected through {host}"}
+    # Everything below only inspects already-downloaded text/URLs (no more
+    # network I/O), but wrapped anyway: a 100k-domain scan runs into
+    # arbitrary malformed input eventually, and one bad domain's oddly
+    # encoded content/URL should never take the other 99999 down with it
+    # (the fetch-stage bug above -- a LocationParseError killing the whole
+    # scan -- is exactly this same class of mistake one layer up).
+    try:
+        # Every hop, not just the final one -- a chain can pass through a
+        # known parking/marketplace host (afternic.com) on its way to a
+        # final host that isn't recognized, or that bot-blocks the
+        # request outright (confirmed: x.co -> afternic.com ->
+        # forsale.godaddy.com, the last hop returning Akamai's "Access
+        # Denied" instead of real content -- checking only resp.url would
+        # have missed the afternic.com hop entirely).
+        hop_urls = [r.url for r in resp.history] + [resp.url]
+        for hop_url in hop_urls:
+            parsed_hop = urlparse(hop_url)
+            host = parsed_hop.hostname or ""
+            for parking_domain in PARKING_REDIRECT_DOMAINS:
+                if host == parking_domain or host.endswith("." + parking_domain):
+                    return {"domain": domain, "status": "parked",
+                            "reason": f"redirected through {host}"}
 
-        # A redirect's URL *path* can carry the shutdown message even when
-        # the page's own <title> doesn't (confirmed: funkyimg.com ->
-        # notion.site/FunkyIMG-is-DOWN-<id> -- Notion is a JS-rendered SPA,
-        # so the raw HTML's <title> is just "Notion"; the actual message
-        # only exists in the URL slug, or after JS runs, which this script
-        # deliberately never does -- no headless-browser dependency).
-        path_words = parsed_hop.path.replace("-", " ").replace("_", " ").lower()
+            # A redirect's URL *path* can carry the shutdown message even
+            # when the page's own <title> doesn't (confirmed: funkyimg.com
+            # -> notion.site/FunkyIMG-is-DOWN-<id> -- Notion is a JS-
+            # rendered SPA, so the raw HTML's <title> is just "Notion";
+            # the actual message only exists in the URL slug, or after JS
+            # runs, which this script deliberately never does -- no
+            # headless-browser dependency).
+            path_words = parsed_hop.path.replace("-", " ").replace("_", " ").lower()
+            for kw in SHUTDOWN_TITLE_KEYWORDS:
+                if kw in path_words:
+                    return {"domain": domain, "status": "shutdown",
+                            "reason": f"redirect path suggests shutdown ({kw!r}): "
+                                      f"{parsed_hop.path[:150]!r}"}
+
+        raw = resp.text[:20000] if resp.text else ""
+        text = raw.lower()
+
+        title_match = TITLE_RE.search(raw[:5000])
+        title = title_match.group(1).lower() if title_match else ""
         for kw in SHUTDOWN_TITLE_KEYWORDS:
-            if kw in path_words:
+            if kw in title:
                 return {"domain": domain, "status": "shutdown",
-                        "reason": f"redirect path suggests shutdown ({kw!r}): {parsed_hop.path[:150]!r}"}
+                        "reason": f"page title suggests shutdown ({kw!r}): {title.strip()[:150]!r}"}
 
-    raw = resp.text[:20000] if resp.text else ""
-    text = raw.lower()
+        for sig in CONTENT_SIGNATURES:
+            if sig in text:
+                return {"domain": domain, "status": "parked", "reason": f"content signature: {sig!r}"}
+        for sig in SHUTDOWN_CONTENT_SIGNATURES:
+            if sig in text:
+                return {"domain": domain, "status": "shutdown", "reason": f"content signature: {sig!r}"}
 
-    title_match = TITLE_RE.search(raw[:5000])
-    title = title_match.group(1).lower() if title_match else ""
-    for kw in SHUTDOWN_TITLE_KEYWORDS:
-        if kw in title:
-            return {"domain": domain, "status": "shutdown",
-                    "reason": f"page title suggests shutdown ({kw!r}): {title.strip()[:150]!r}"}
-
-    for sig in CONTENT_SIGNATURES:
-        if sig in text:
-            return {"domain": domain, "status": "parked", "reason": f"content signature: {sig!r}"}
-    for sig in SHUTDOWN_CONTENT_SIGNATURES:
-        if sig in text:
-            return {"domain": domain, "status": "shutdown", "reason": f"content signature: {sig!r}"}
-
-    return {"domain": domain, "status": "ok"}
+        return {"domain": domain, "status": "ok"}
+    except Exception as e:
+        return {"domain": domain, "status": "error", "detail": f"post-fetch: {e}"[:200]}
 
 
 def main():
@@ -207,7 +227,15 @@ def main():
          concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(check_domain, d): d for d in todo}
         for fut in concurrent.futures.as_completed(futures):
-            result = fut.result()
+            # Defense in depth: check_domain() itself catches everything
+            # it can, but a 100k-item unattended run should survive even a
+            # bug in this script's own logic rather than losing the rest
+            # of the queue to one uncaught exception.
+            try:
+                result = fut.result()
+            except Exception as e:
+                result = {"domain": futures[fut], "status": "error",
+                          "detail": f"uncaught: {e}"[:200]}
             out.write(json.dumps(result) + "\n")
             out.flush()
             checked += 1
