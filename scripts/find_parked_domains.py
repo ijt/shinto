@@ -80,9 +80,17 @@ SHUTDOWN_TITLE_KEYWORDS = [
 ]
 # The same idea, but specific enough multi-word phrases to check the full
 # body safely too (a title match alone won't catch a shutdown notice
-# with a generic <title>, e.g. just "Notion").
+# with a generic <title>, e.g. just "Notion"). "is no longer available"
+# was here too but got dropped: confirmed concretely as a false-positive
+# generator on a real scan -- it also matches generic UI copy having
+# nothing to do with the site itself being dead (a Shopify app-review
+# widget's "This review is no longer available", among others), flagging
+# fully-alive sites (character.ai, apps.shopify.com, aspell.net, ...) as
+# shut down. The title-only version of the same phrase (SHUTDOWN_TITLE_
+# KEYWORDS above) is fine to keep broad -- titles are short and
+# intentional, not general body prose.
 SHUTDOWN_CONTENT_SIGNATURES = [
-    "is no longer available", "no longer in operation",
+    "no longer in operation",
     "we have discontinued", "service is no longer",
     "this website is no longer", "this service has been discontinued",
     "we're no longer accepting", "has permanently closed",
