@@ -41,6 +41,7 @@ bool isShintoShortcut(const QKeyEvent *ke, const QKeySequence &backShortcut) {
     case Qt::Key_W:
     case Qt::Key_F:
     case Qt::Key_J:
+    case Qt::Key_R:
       return true;
     default:
       return false;
@@ -298,6 +299,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), [this] { close(); });
   addShortcut(config_.backShortcut, &BrowserWindow::onBackShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), &BrowserWindow::onFindShortcut);
+  addShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), &BrowserWindow::onReloadShortcut);
   // The conventional browser "show downloads" binding (Chrome/Firefox),
   // unused in Shinto otherwise -- independent of downloadBar_'s click
   // handler so the downloads list stays reachable even when nothing is
@@ -462,6 +464,13 @@ void BrowserWindow::onFindShortcut() {
   if (state_ != State::Loaded) return;
   findBar_->showBar();
   relayoutFindBar();
+}
+
+void BrowserWindow::onReloadShortcut() {
+  // Same reasoning as onFindShortcut(): nothing real to reload while the
+  // gate is up (Empty/Gate).
+  if (state_ != State::Loaded) return;
+  webView_->reload();
 }
 
 void BrowserWindow::doFind(const QString &text, bool backward) {

@@ -105,6 +105,7 @@ class BrowserWindow : public QMainWindow {
   void onEditAddressShortcut();
   void onBackShortcut();
   void onFindShortcut();
+  void onReloadShortcut();
   // `backward` selects QWebEnginePage::FindBackward -- the ↑/previous
   // direction. An empty `text` just clears any existing highlighting
   // (searchChanged's "cleared the box" case) rather than searching.
