@@ -178,6 +178,8 @@ int main(int argc, char *argv[]) {
                     });
   QObject::connect(&server, &shinto::SingletonServer::themeReloadRequested,
                     [] { shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette()); });
+  QObject::connect(&server, &shinto::SingletonServer::cancelDownloadRequested, &downloads,
+                    &shinto::DownloadManager::cancel);
 
   if (!server.listen()) {
     // Lost a race with another process becoming the daemon in the tiny

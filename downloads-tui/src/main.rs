@@ -5,8 +5,10 @@
 // with the running Shinto daemon at all, just a shared SQLite file.
 
 use std::env;
+use std::io::{Read, Write};
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -87,22 +89,33 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> Result<(), Box<dyn std::error
                         }
                         _ => {}
                     },
-                    Focus::ActionPopup { target, selected } => match key.code {
-                        KeyCode::Esc => focus = Focus::List,
-                        KeyCode::Down | KeyCode::Char('j') => *selected = (*selected + 1) % 3,
-                        KeyCode::Up | KeyCode::Char('k') => *selected = (*selected + 2) % 3,
-                        KeyCode::Enter => {
-                            if let Some(d) = downloads.get(*target) {
-                                match *selected {
-                                    0 => open_file(&d.path),
-                                    1 => open_folder(&d.path),
-                                    _ => {}
-                                }
+                    Focus::ActionPopup { target, selected } => {
+                        let count = downloads
+                            .get(*target)
+                            .map(|d| actions_for(d.state).len())
+                            .unwrap_or(1);
+                        match key.code {
+                            KeyCode::Esc => focus = Focus::List,
+                            KeyCode::Down | KeyCode::Char('j') => *selected = (*selected + 1) % count,
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                *selected = (*selected + count - 1) % count
                             }
-                            focus = Focus::List;
+                            KeyCode::Enter => {
+                                if let Some(d) = downloads.get(*target) {
+                                    if let Some((_, action)) = actions_for(d.state).get(*selected) {
+                                        match action {
+                                            Action::OpenFile => open_file(&d.path),
+                                            Action::OpenFolder => open_folder(&d.path),
+                                            Action::CancelDownload => cancel_download(d.id),
+                                            Action::Close => {}
+                                        }
+                                    }
+                                }
+                                focus = Focus::List;
+                            }
+                            _ => {}
                         }
-                        _ => {}
-                    },
+                    }
                 }
             }
         }
@@ -125,14 +138,24 @@ fn select_prev(state: &mut ListState, len: usize) {
     state.select(Some(prev));
 }
 
+// Every child process launched from here has its stdio nulled -- left
+// inherited (the default), anything the child prints (dbus-send's own
+// output, or a freshly-launched file manager's own startup warnings/logs)
+// lands directly in this process's raw-mode terminal screen, corrupting
+// the TUI (confirmed concretely: "log spam" appearing over the display
+// after opening a containing folder).
 fn open_file(path: &str) {
-    let _ = Command::new("xdg-open").arg(path).spawn();
+    let _ = Command::new("xdg-open")
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
 }
 
 // org.freedesktop.FileManager1.ShowItems opens the folder with `path`
 // highlighted (most file managers implement it); falls back to a plain
-// (unselected) folder-open via xdg-open if nothing answers -- same
-// approach and same reasoning as app/src/RevealFile.cpp on the Qt side.
+// (unselected) folder-open via xdg-open if nothing answers.
 fn open_folder(path: &str) {
     let uri = format!("file://{path}");
     let status = Command::new("dbus-send")
@@ -145,6 +168,9 @@ fn open_folder(path: &str) {
             &format!("array:string:{uri}"),
             "string:",
         ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status();
     let ok = matches!(status, Ok(s) if s.success());
     if !ok {
@@ -152,7 +178,12 @@ fn open_folder(path: &str) {
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| PathBuf::from("."));
-        let _ = Command::new("xdg-open").arg(dir).spawn();
+        let _ = Command::new("xdg-open")
+            .arg(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
     }
 }
 
@@ -167,6 +198,59 @@ fn db_path() -> PathBuf {
             PathBuf::from(home).join(".local/share")
         });
     base.join("shinto").join("downloads.sqlite")
+}
+
+// $XDG_RUNTIME_DIR/shinto.sock, falling back to /tmp/shinto.sock -- mirrors
+// shinto::singletonSocketPath() in app/src/Shinto.h exactly. This is the
+// one thing shinto-downloads actually needs live IPC with the daemon for:
+// cancelling a still-running QWebEngineDownloadRequest can only happen in
+// that process, unlike everything else here (reading downloads.sqlite,
+// opening a file/folder), which needs nothing from it.
+fn singleton_socket_path() -> PathBuf {
+    let runtime = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(runtime).join("shinto.sock")
+}
+
+// Best-effort: SingletonServer (app/src/SingletonServer.cpp) replies
+// "OK\n" to every recognized command, but there's nothing useful to do
+// here if the connection or the reply fails -- the next poll of
+// downloads.sqlite (~500ms) reveals whether it actually worked regardless.
+fn cancel_download(id: i64) {
+    if let Ok(mut stream) = UnixStream::connect(singleton_socket_path()) {
+        let _ = stream.write_all(format!("CANCEL_DOWNLOAD {id}\n").as_bytes());
+        let mut buf = [0u8; 8];
+        let _ = stream.read(&mut buf);
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Action {
+    OpenFile,
+    OpenFolder,
+    CancelDownload,
+    Close,
+}
+
+// What the action popup offers depends on the download's own state --
+// "Cancel download" only makes sense while it's actually running, and
+// "Open file" only once it's actually finished (successfully).
+fn actions_for(state: State) -> Vec<(&'static str, Action)> {
+    match state {
+        State::InProgress => vec![
+            ("\u{1F4C1} Open containing folder", Action::OpenFolder), // 📁
+            ("\u{1F5D1} Cancel download", Action::CancelDownload),    // 🗑
+            ("\u{2715} Close", Action::Close),                        // ✕
+        ],
+        State::Completed => vec![
+            ("\u{1F4C4} Open file", Action::OpenFile), // 📄
+            ("\u{1F4C1} Open containing folder", Action::OpenFolder),
+            ("\u{2715} Close", Action::Close),
+        ],
+        State::Interrupted | State::Cancelled => vec![
+            ("\u{1F4C1} Open containing folder", Action::OpenFolder),
+            ("\u{2715} Close", Action::Close),
+        ],
+    }
 }
 
 fn status_glyph_and_color(state: State, palette: &Palette) -> (&'static str, Color) {
@@ -275,29 +359,31 @@ fn draw(frame: &mut Frame, downloads: &[Download], list_state: &mut ListState, f
         frame.render_stateful_widget(list, area, list_state);
     }
 
-    if let Focus::ActionPopup { selected, .. } = focus {
-        let popup_area = centered_rect(34, 7, area);
-        frame.render_widget(Clear, popup_area);
-        let labels = ["\u{1F4C4} Open file", "\u{1F4C1} Open containing folder", "\u{2715} Cancel"]; // 📄 📁 ✕
-        let items: Vec<ListItem> = labels
-            .iter()
-            .enumerate()
-            .map(|(i, label)| {
-                let style = if i == *selected {
-                    Style::default().add_modifier(Modifier::REVERSED)
-                } else {
-                    Style::default()
-                };
-                ListItem::new(Line::from(Span::styled(*label, style)))
-            })
-            .collect();
-        let popup = List::new(items).block(
-            Block::default()
-                .title(" Action ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(palette.accent))
-                .style(Style::default().bg(palette.bg).fg(palette.fg)),
-        );
-        frame.render_widget(popup, popup_area);
+    if let Focus::ActionPopup { target, selected } = focus {
+        if let Some(d) = downloads.get(*target) {
+            let actions = actions_for(d.state);
+            let popup_area = centered_rect(34, actions.len() as u16 + 2, area);
+            frame.render_widget(Clear, popup_area);
+            let items: Vec<ListItem> = actions
+                .iter()
+                .enumerate()
+                .map(|(i, (label, _))| {
+                    let style = if i == *selected {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default()
+                    };
+                    ListItem::new(Line::from(Span::styled(*label, style)))
+                })
+                .collect();
+            let popup = List::new(items).block(
+                Block::default()
+                    .title(" Action ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(palette.accent))
+                    .style(Style::default().bg(palette.bg).fg(palette.fg)),
+            );
+            frame.render_widget(popup, popup_area);
+        }
     }
 }

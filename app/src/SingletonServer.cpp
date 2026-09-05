@@ -32,6 +32,11 @@ void SingletonServer::handleNewConnection() {
         const QString url = line.mid(4).trimmed();
         emit openRequested(url);
         socket->write("OK\n");
+      } else if (line.startsWith(QStringLiteral("CANCEL_DOWNLOAD "))) {
+        bool ok = false;
+        const int id = line.mid(16).trimmed().toInt(&ok);
+        if (ok) emit cancelDownloadRequested(id);
+        socket->write("OK\n");
       }
       socket->flush();
       socket->disconnectFromServer();

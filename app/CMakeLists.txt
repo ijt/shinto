@@ -25,6 +25,7 @@ qt_add_executable(shinto-bin
   src/Notify.cpp
   src/DownloadManager.cpp
   src/DownloadBar.cpp
+  src/DownloadsTuiLauncher.cpp
   src/WebProfile.cpp
   src/ThemeLoader.cpp
   src/Config.cpp

@@ -1,7 +1,6 @@
 #include "BrowserWindow.h"
 
 #include <QKeyEvent>
-#include <QProcess>
 #include <QResizeEvent>
 #include <QShortcut>
 #include <QUrl>
@@ -16,6 +15,7 @@
 
 #include "DownloadBar.h"
 #include "DownloadManager.h"
+#include "DownloadsTuiLauncher.h"
 #include "FindBar.h"
 #include "OmniboxOverlay.h"
 
@@ -360,10 +360,7 @@ void BrowserWindow::refreshDownloadBar() {
   }
 }
 
-void BrowserWindow::launchDownloadsTui() {
-  QProcess::startDetached(QStringLiteral("xdg-terminal-exec"),
-                           {QStringLiteral("--"), QStringLiteral("shinto-downloads")});
-}
+void BrowserWindow::launchDownloadsTui() { launchOrSkipDownloadsTui(); }
 
 void BrowserWindow::enterEmpty(bool showGate) {
   state_ = State::Empty;

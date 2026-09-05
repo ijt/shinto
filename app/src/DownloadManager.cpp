@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QWebEngineDownloadRequest>
 
+#include "DownloadsTuiLauncher.h"
 #include "Notify.h"
 #include "Shinto.h"
 
@@ -118,6 +119,17 @@ bool DownloadManager::open() {
   return true;
 }
 
+void DownloadManager::cancel(int id) {
+  const auto it = live_.constFind(id);
+  if (it == live_.constEnd() || it.value().isNull()) return;
+  // Triggers the DownloadCancelled branch in track()'s stateChanged
+  // handler above (persist, live_ cleanup, file cleanup, signal) -- cancel
+  // has exactly one thing to do: ask Chromium to stop, then let the
+  // existing state machine handle the rest the same way it already does
+  // for a completion or failure.
+  it.value()->cancel();
+}
+
 void DownloadManager::refreshFromDisk() {
   QSqlQuery q(db_);
   q.exec(kSelectAllSql);
@@ -204,9 +216,10 @@ void DownloadManager::track(QWebEngineDownloadRequest *download) {
   record.state = State::InProgress;
   record.startedAt = QDateTime::currentSecsSinceEpoch();
   persist(record);
+  live_[id] = download;
   emit downloadAdded(id);
 
-  notify(QStringLiteral("Download started"), candidate);
+  notifyClickable(QStringLiteral("Download started"), candidate, [] { launchOrSkipDownloadsTui(); });
 
   // Emitted signal throttled to ~4/sec -- receivedBytesChanged fires far
   // more often than any in-process UI needs to redraw. The SQLite write is
@@ -259,6 +272,7 @@ void DownloadManager::track(QWebEngineDownloadRequest *download) {
             r.receivedBytes = download->receivedBytes();
             r.finishedAt = QDateTime::currentSecsSinceEpoch();
             persist(r);
+            live_.remove(id);
             emit downloadStateChanged(id, State::Completed);
             break;
           }
@@ -282,6 +296,7 @@ void DownloadManager::track(QWebEngineDownloadRequest *download) {
             r.interruptReason = download->interruptReasonString();
             r.finishedAt = QDateTime::currentSecsSinceEpoch();
             persist(r);
+            live_.remove(id);
             emit downloadStateChanged(id, State::Interrupted);
             break;
           }
@@ -290,6 +305,17 @@ void DownloadManager::track(QWebEngineDownloadRequest *download) {
             r.state = State::Cancelled;
             r.finishedAt = QDateTime::currentSecsSinceEpoch();
             persist(r);
+            live_.remove(id);
+            // Chromium's own cancel handling should already delete its
+            // partial file, but that's not guaranteed across every
+            // QtWebEngine version/interruption path -- a stray partial
+            // file left behind after the user explicitly asked to cancel
+            // is exactly the kind of thing worth being defensive about.
+            // Both the final name and Chromium's own in-flight ".download"
+            // suffix are tried; QFile::remove() on a nonexistent path is
+            // just a harmless no-op.
+            QFile::remove(r.path);
+            QFile::remove(r.path + QStringLiteral(".download"));
             emit downloadStateChanged(id, State::Cancelled);
             break;
           }

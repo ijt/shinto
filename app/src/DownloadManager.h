@@ -7,7 +7,9 @@
 // react live without polling.
 #pragma once
 
+#include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QSqlDatabase>
 #include <QString>
 #include <QVector>
@@ -59,15 +61,19 @@ class DownloadManager : public QObject {
   QVector<DownloadRecord> all() const;
 
   // Re-reads every row from disk, replacing the in-memory cache -- for a
-  // process that didn't write these rows itself (see DownloadsTui.cpp,
-  // `shinto --downloads`: a separate short-lived process from the daemon
-  // that's actually downloading things, polling the same SQLite file the
-  // daemon is writing to). Never rewrites stale InProgress rows the way
-  // open() does -- that fixup is the daemon's own restart-recovery, not
-  // something a read-only viewer should do to another process's data.
+  // process that didn't write these rows itself. Never rewrites stale
+  // InProgress rows the way open() does -- that fixup is the daemon's own
+  // restart-recovery, not something a read-only viewer should do to
+  // another process's data.
   void refreshFromDisk();
 
   bool hasActive() const;
+
+  // Cancels the still-InProgress download with this id, if any (a no-op,
+  // not an error, if it already finished or `id` is unknown) -- deletes
+  // its partial file too. The only caller today is SingletonServer's
+  // "CANCEL_DOWNLOAD <id>" command, sent by downloads-tui/'s action popup.
+  void cancel(int id);
 
   // The most recently *started* still-InProgress download -- for the
   // bottom-bar overlay, which only ever shows one at a time. Returns a
@@ -93,6 +99,13 @@ class DownloadManager : public QObject {
 
   QSqlDatabase db_;
   QVector<DownloadRecord> records_;
+  // Live QWebEngineDownloadRequest objects, keyed by id -- needed for
+  // cancel(id) to actually reach the right one; records_/persist() alone
+  // only carry the SQLite-mirrored fields, not the live Chromium object.
+  // Erased once a download reaches any terminal state (QPointer would
+  // null itself out on destruction regardless, but this keeps the map
+  // from growing across a long daemon uptime).
+  QHash<int, QPointer<QWebEngineDownloadRequest>> live_;
 };
 
 }  // namespace shinto

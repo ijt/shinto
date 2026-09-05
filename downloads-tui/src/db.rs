@@ -31,6 +31,7 @@ impl State {
 }
 
 pub struct Download {
+    pub id: i64, // matches QWebEngineDownloadRequest::id() on the C++ side
     pub filename: String,
     pub path: String,
     pub total_bytes: i64,
@@ -44,16 +45,17 @@ pub fn load_all(path: &Path) -> Result<Vec<Download>> {
     }
     let conn = Connection::open(path)?;
     let mut stmt = conn.prepare(
-        "SELECT filename, path, total_bytes, received_bytes, state \
+        "SELECT id, filename, path, total_bytes, received_bytes, state \
          FROM downloads ORDER BY started_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Download {
-            filename: row.get(0)?,
-            path: row.get(1)?,
-            total_bytes: row.get(2)?,
-            received_bytes: row.get(3)?,
-            state: State::from_i64(row.get(4)?),
+            id: row.get(0)?,
+            filename: row.get(1)?,
+            path: row.get(2)?,
+            total_bytes: row.get(3)?,
+            received_bytes: row.get(4)?,
+            state: State::from_i64(row.get(5)?),
         })
     })?;
     rows.collect()
