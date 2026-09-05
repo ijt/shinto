@@ -11,6 +11,8 @@
 #include <QSurfaceFormat>
 #include <QWebEngineProfile>
 
+#include <cstdio>
+
 #include "BrowserWindow.h"
 #include "HistoryStore.h"
 #include "PopularDomains.h"
@@ -88,6 +90,25 @@ int main(int argc, char *argv[]) {
   QStringList args;
   for (int i = 1; i < argc; ++i) {
     args << QString::fromLocal8Bit(argv[i]);
+  }
+
+  // omarchy-launch-browser probes `$browser_exec --help | grep -q MOZ_LOG`
+  // for every default-browser launch (Super+Shift+B), to decide whether to
+  // pass --private-window (Firefox-family) or --incognito. Without this,
+  // --help had no special handling and fell through to being treated as a
+  // URL to open -- so every such launch silently asked the running daemon
+  // to open a real window navigated to the literal string "--help", which
+  // QtWebEngine renders as blank white (reproduced concretely: Super+Shift+B
+  // showed nothing but blank white, while Super+Shift+Return -- which
+  // launches shinto directly, no probe -- worked fine). Print and exit
+  // before touching the daemon at all; stdout (not qInfo/qWarning, which
+  // this Qt build routes to the journal by default, invisible to a pipe)
+  // since the probe pipes it straight into grep.
+  if (args.contains(QStringLiteral("--help")) || args.contains(QStringLiteral("-h"))) {
+    std::fputs("Usage: shinto [url]\n"
+               "Page viewer for Omarchy -- one window, one page.\n",
+               stdout);
+    return 0;
   }
 
   // omarchy-launch-browser maps --private to --incognito/--inprivate and
