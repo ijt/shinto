@@ -44,6 +44,13 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> Result<(), Box<dyn std::error
     let palette = theme::load_palette();
     let db_path = db_path();
 
+    // A fresh window shouldn't have to stare at whatever
+    // finished/failed/cancelled downloads piled up across every previous
+    // session -- only what's actually still running matters at that
+    // point. `c` (below) does the same thing on demand for a session
+    // that's been open a while and accumulated its own finished ones.
+    let _ = db::clear_finished(&db_path);
+
     let mut downloads = db::load_all(&db_path).unwrap_or_default();
     let mut list_state = ListState::default();
     if !downloads.is_empty() {
@@ -86,6 +93,11 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> Result<(), Box<dyn std::error
                                     focus = Focus::ActionPopup { target, selected: 0 };
                                 }
                             }
+                        }
+                        KeyCode::Char('c') => {
+                            let _ = db::clear_finished(&db_path);
+                            downloads = db::load_all(&db_path).unwrap_or_default();
+                            list_state.select(if downloads.is_empty() { None } else { Some(0) });
                         }
                         _ => {}
                     },
@@ -337,6 +349,7 @@ fn draw(frame: &mut Frame, downloads: &[Download], list_state: &mut ListState, f
     let block = Block::default()
         .title(" \u{21e9} Shinto Downloads ") // ⇩
         .title_alignment(Alignment::Center)
+        .title_bottom(Line::from(" j/k move  \u{23ce} act  c clear finished  q quit ").centered()) // ⏎
         .borders(Borders::ALL)
         .border_style(Style::default().fg(palette.accent))
         .style(Style::default().bg(palette.bg).fg(palette.fg));

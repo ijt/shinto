@@ -39,6 +39,18 @@ pub struct Download {
     pub state: State,
 }
 
+// Removes every row that isn't still InProgress -- Completed/Interrupted/
+// Cancelled all count as "old stuff" the user is done looking at. A no-op
+// (not an error) if the file doesn't exist yet.
+pub fn clear_finished(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let conn = Connection::open(path)?;
+    conn.execute("DELETE FROM downloads WHERE state != 0", [])?; // 0 == InProgress
+    Ok(())
+}
+
 pub fn load_all(path: &Path) -> Result<Vec<Download>> {
     if !path.exists() {
         return Ok(Vec::new());
