@@ -33,6 +33,11 @@ inline QString webEngineStoragePath() { return dataHome() + "/profile/webengine"
 // SQLite typed/visited history store, independent of the WebEngine profile.
 inline QString historyDbPath() { return dataHome() + "/history.sqlite"; }
 
+// SQLite download-tracking store (see DownloadManager). A separate file
+// (and, per DownloadManager::open(), a separate QSqlDatabase connection
+// name) from historyDbPath() -- unrelated data, no reason to share a file.
+inline QString downloadsDbPath() { return dataHome() + "/downloads.sqlite"; }
+
 // One dismissed PopularDomains domain per line -- the omnibox suggestion
 // dropdown's per-row "x" button on a default (non-history) suggestion.
 // Unlike a history entry (an actual SQLite row deleted outright), the

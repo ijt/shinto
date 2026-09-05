@@ -23,6 +23,7 @@ class QResizeEvent;
 
 namespace shinto {
 
+class DownloadManager;
 class FindBar;
 class OmniboxOverlay;
 class WebView;
@@ -38,7 +39,8 @@ class BrowserWindow : public QMainWindow {
   // at daemon startup; loadConfig() is cheap next to everything else spawn
   // already does.
   static BrowserWindow *spawn(QWebEngineProfile *profile, HistoryStore *history,
-                               PopularDomains *domains, const QString &url);
+                               PopularDomains *domains, DownloadManager *downloads,
+                               const QString &url);
 
   // Fulfills a window.open()-driven popup request (target=_blank, JS
   // window.open(), ctrl-click -- all route through
@@ -50,7 +52,7 @@ class BrowserWindow : public QMainWindow {
   // the same URL string has no such relationship and leaves those flows
   // hung on a blank/unusable page instead.
   static BrowserWindow *spawnForRequest(QWebEngineProfile *profile, HistoryStore *history,
-                                         PopularDomains *domains,
+                                         PopularDomains *domains, DownloadManager *downloads,
                                          QWebEngineNewWindowRequest &request);
 
   // Re-applies a reloaded theme to every live window (the `shinto theme` /
@@ -72,11 +74,11 @@ class BrowserWindow : public QMainWindow {
   // navigate it to a real URL the user never typed) -- see
   // spawnForRequest()'s own comment for the concrete complaint this fixes.
   static BrowserWindow *spawnInternal(QWebEngineProfile *profile, HistoryStore *history,
-                                       PopularDomains *domains, const QString &url,
-                                       bool showEmptyGate);
+                                       PopularDomains *domains, DownloadManager *downloads,
+                                       const QString &url, bool showEmptyGate);
 
   BrowserWindow(QWebEngineProfile *profile, HistoryStore *history, PopularDomains *domains,
-                const QString &url, bool showEmptyGate);
+                DownloadManager *downloads, const QString &url, bool showEmptyGate);
 
   void relayout();
   void relayoutFindBar();
@@ -95,6 +97,7 @@ class BrowserWindow : public QMainWindow {
 
   HistoryStore *history_;
   PopularDomains *domains_;
+  DownloadManager *downloads_;
   // Owned by this window, not shared -- loaded fresh in the constructor
   // (see spawn()'s doc comment), so each window can have read a different
   // config.lua than its siblings if the file changed between opens.

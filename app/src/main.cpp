@@ -14,6 +14,7 @@
 #include <cstdio>
 
 #include "BrowserWindow.h"
+#include "DownloadManager.h"
 #include "HistoryStore.h"
 #include "PopularDomains.h"
 #include "Shinto.h"
@@ -154,7 +155,13 @@ int main(int argc, char *argv[]) {
   // quit when the last window closes.
   app.setQuitOnLastWindowClosed(false);
 
-  QWebEngineProfile *profile = shinto::createSharedProfile(&app);
+  // Constructed before the profile: createSharedProfile() wires the
+  // profile's downloadRequested signal straight to downloads.track().
+  shinto::DownloadManager downloads;
+  if (!downloads.open()) {
+    qWarning() << "shinto: continuing without persistent download history";
+  }
+  QWebEngineProfile *profile = shinto::createSharedProfile(&app, &downloads);
 
   shinto::HistoryStore history;
   if (!history.open()) {
@@ -166,8 +173,8 @@ int main(int argc, char *argv[]) {
 
   shinto::SingletonServer server;
   QObject::connect(&server, &shinto::SingletonServer::openRequested,
-                    [profile, &history, &domains](const QString &openUrl) {
-                      shinto::BrowserWindow::spawn(profile, &history, &domains, openUrl);
+                    [profile, &history, &domains, &downloads](const QString &openUrl) {
+                      shinto::BrowserWindow::spawn(profile, &history, &domains, &downloads, openUrl);
                     });
   QObject::connect(&server, &shinto::SingletonServer::themeReloadRequested,
                     [] { shinto::BrowserWindow::applyPaletteToAll(shinto::loadPalette()); });
@@ -183,7 +190,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (!forceDaemon) {
-    shinto::BrowserWindow::spawn(profile, &history, &domains, url);
+    shinto::BrowserWindow::spawn(profile, &history, &domains, &downloads, url);
   }
   // else: `--daemon` (the systemd unit) starts with zero windows, warm and
   // waiting for the first Super+Shift+Return handoff.

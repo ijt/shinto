@@ -8,9 +8,13 @@ class QWebEngineProfile;
 
 namespace shinto {
 
+class DownloadManager;
+
 // Ownership: the returned profile is a child of `parent` (typically the
 // QApplication or another long-lived owner). Do not call this more than once
 // per process — QtWebEngine expects one persistent profile instance.
-QWebEngineProfile *createSharedProfile(QObject *parent);
+// `downloads` (not owned) receives every QWebEngineProfile::downloadRequested
+// -- see DownloadManager::track().
+QWebEngineProfile *createSharedProfile(QObject *parent, DownloadManager *downloads);
 
 }  // namespace shinto

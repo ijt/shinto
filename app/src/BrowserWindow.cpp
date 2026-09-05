@@ -95,14 +95,15 @@ QVector<BrowserWindow *> BrowserWindow::instances_;
 Palette BrowserWindow::currentPalette_;
 
 BrowserWindow *BrowserWindow::spawn(QWebEngineProfile *profile, HistoryStore *history,
-                                     PopularDomains *domains, const QString &url) {
-  return spawnInternal(profile, history, domains, url, /*showEmptyGate=*/true);
+                                     PopularDomains *domains, DownloadManager *downloads,
+                                     const QString &url) {
+  return spawnInternal(profile, history, domains, downloads, url, /*showEmptyGate=*/true);
 }
 
 BrowserWindow *BrowserWindow::spawnInternal(QWebEngineProfile *profile, HistoryStore *history,
-                                             PopularDomains *domains, const QString &url,
-                                             bool showEmptyGate) {
-  auto *win = new BrowserWindow(profile, history, domains, url, showEmptyGate);
+                                             PopularDomains *domains, DownloadManager *downloads,
+                                             const QString &url, bool showEmptyGate) {
+  auto *win = new BrowserWindow(profile, history, domains, downloads, url, showEmptyGate);
   win->setAttribute(Qt::WA_DeleteOnClose);
   instances_.push_back(win);
   win->resize(1200, 800);
@@ -112,6 +113,7 @@ BrowserWindow *BrowserWindow::spawnInternal(QWebEngineProfile *profile, HistoryS
 
 BrowserWindow *BrowserWindow::spawnForRequest(QWebEngineProfile *profile, HistoryStore *history,
                                                PopularDomains *domains,
+                                               DownloadManager *downloads,
                                                QWebEngineNewWindowRequest &request) {
   // showEmptyGate=false: a popup has no user-typed destination to show in
   // a location bar -- it's about to be navigated (via openIn() below) to
@@ -121,7 +123,7 @@ BrowserWindow *BrowserWindow::spawnForRequest(QWebEngineProfile *profile, Histor
   // for a window that's already mid-navigation on the caller's behalf
   // (reported concretely: the location bar showing while a link-opened
   // window was just loading).
-  BrowserWindow *win = spawnInternal(profile, history, domains, QString(),
+  BrowserWindow *win = spawnInternal(profile, history, domains, downloads, QString(),
                                       /*showEmptyGate=*/false);
   // openIn() must be called before this handler (spawnForRequest is
   // called synchronously from it) returns, or Qt rejects the window-open
@@ -154,8 +156,9 @@ void BrowserWindow::applyPaletteToAll(const Palette &palette) {
 }
 
 BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
-                              PopularDomains *domains, const QString &url, bool showEmptyGate)
-    : history_(history), domains_(domains), config_(loadConfig()) {
+                              PopularDomains *domains, DownloadManager *downloads,
+                              const QString &url, bool showEmptyGate)
+    : history_(history), domains_(domains), downloads_(downloads), config_(loadConfig()) {
   setWindowTitle(QStringLiteral("Shinto"));
 
   auto *container = new QWidget(this);
@@ -244,7 +247,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   connect(webView_->page(), &QWebEnginePage::newWindowRequested, this,
           [this](QWebEngineNewWindowRequest &request) {
             BrowserWindow::spawnForRequest(webView_->page()->profile(), history_, domains_,
-                                            request);
+                                            downloads_, request);
           });
   // Fullscreen API: enablement lives on the shared profile; accepting the
   // request here is what actually lets the element fill the viewport, and
@@ -376,7 +379,7 @@ void BrowserWindow::onOverlayCancelled() {
 }
 
 void BrowserWindow::onNewPageShortcut() {
-  BrowserWindow::spawn(webView_->page()->profile(), history_, domains_, QString());
+  BrowserWindow::spawn(webView_->page()->profile(), history_, domains_, downloads_, QString());
 }
 
 void BrowserWindow::onEditAddressShortcut() {

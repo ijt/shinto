@@ -1,18 +1,13 @@
 #include "WebProfile.h"
 
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QPointer>
-#include <QStandardPaths>
-#include <QTimer>
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineProfile>
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
 
-#include "Notify.h"
+#include "DownloadManager.h"
 #include "Shinto.h"
 
 namespace shinto {
@@ -163,110 +158,23 @@ void installWebAuthnCapabilityShim(QWebEngineProfile *profile) {
   profile->scripts()->insert(script);
 }
 
-// Chromium's own DownloadInterruptReason taxonomy mixes transient
-// network/server hiccups in with things retrying can't fix (bad disk,
-// blocked file, user cancellation). Reproduced concretely: a real
-// multi-hundred-MB download from a CDN that curl pulls without a hitch
-// (400MB straight through at a steady 5.8MB/s) still gets killed by
-// QtWebEngine's network stack with NetworkFailed every 30-90 seconds on
-// this connection -- not this specific site's fault, not GPU/QUIC flags
-// (confirmed unaffected by --disable-quic), just a flaky link Chromium's
-// downloader is happy to resume if asked. Only the reasons below are worth
-// retrying; anything else (a real disk problem, a rejected/blocked file,
-// the user hitting cancel) would just fail again identically.
-bool isRetryableInterrupt(QWebEngineDownloadRequest::DownloadInterruptReason reason) {
-  switch (reason) {
-    case QWebEngineDownloadRequest::NetworkFailed:
-    case QWebEngineDownloadRequest::NetworkTimeout:
-    case QWebEngineDownloadRequest::NetworkDisconnected:
-    case QWebEngineDownloadRequest::NetworkServerDown:
-    case QWebEngineDownloadRequest::ServerFailed:
-    case QWebEngineDownloadRequest::ServerUnreachable:
-      return true;
-    default:
-      return false;
-  }
-}
-
 // Nothing in Shinto connected to QWebEngineProfile::downloadRequested, and
 // an unhandled download just sits forever in the DownloadRequested state --
 // nothing is written to disk, and there's no error either, so a user
 // clicking a download link (confirmed concretely: a .dmg/.exe/.tar.gz from
 // jetbrains.com) sees literally nothing happen and has no way to tell
-// whether it worked. Shinto has no download-manager UI to show progress in
-// instead, so this accepts every download straight into the platform
-// Downloads folder and narrates start/finish/failure via desktop
-// notification (see Notify.h) -- the same "no terminal in sight" reasoning
-// that already justified one for config errors.
-void installDownloadHandler(QWebEngineProfile *profile) {
-  QObject::connect(
-      profile, &QWebEngineProfile::downloadRequested, profile,
-      [](QWebEngineDownloadRequest *download) {
-        if (!download) return;
-
-        const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-        QDir().mkpath(dir);
-        download->setDownloadDirectory(dir);
-
-        // QWebEngineDownloadRequest doesn't dedupe filenames the way
-        // Chromium's own save-as dialog would -- a second download of the
-        // same name would silently clobber the first one without this.
-        QString name = download->suggestedFileName();
-        if (name.isEmpty()) name = QStringLiteral("download");
-        const QFileInfo info(name);
-        const QString base = info.completeBaseName();
-        const QString ext = info.suffix();
-        QString candidate = name;
-        for (int n = 1; QFile::exists(dir + QLatin1Char('/') + candidate); ++n) {
-          candidate = ext.isEmpty() ? QStringLiteral("%1 (%2)").arg(base).arg(n)
-                                     : QStringLiteral("%1 (%2).%3").arg(base).arg(n).arg(ext);
-        }
-        download->setDownloadFileName(candidate);
-        download->accept();
-
-        notify(QStringLiteral("Download started"), candidate);
-
-        // Retries silently (no notification) up to this many times before
-        // reporting failure -- observed concretely needing more than one or
-        // two on this network for a ~1.2GB file, since each interruption
-        // costs nothing but a resume() (the CDN supports Range requests, so
-        // this continues rather than restarting from scratch), not a full
-        // redownload.
-        auto retriesLeft = std::make_shared<int>(8);
-        QObject::connect(
-            download, &QWebEngineDownloadRequest::stateChanged, download,
-            [download, candidate, retriesLeft](QWebEngineDownloadRequest::DownloadState state) {
-              switch (state) {
-                case QWebEngineDownloadRequest::DownloadCompleted:
-                  notify(QStringLiteral("Download complete"), candidate);
-                  break;
-                case QWebEngineDownloadRequest::DownloadInterrupted: {
-                  const auto reason = download->interruptReason();
-                  if (isRetryableInterrupt(reason) && *retriesLeft > 0) {
-                    --*retriesLeft;
-                    // A moment's grace before resuming rather than
-                    // hammering the connection back immediately.
-                    QPointer<QWebEngineDownloadRequest> guarded(download);
-                    QTimer::singleShot(1000, [guarded]() {
-                      if (guarded) guarded->resume();
-                    });
-                    break;
-                  }
-                  notify(QStringLiteral("Download failed"),
-                         candidate + QStringLiteral(": ") + download->interruptReasonString(),
-                         /*critical=*/true);
-                  break;
-                }
-                default:
-                  break;
-              }
-            });
-      });
+// whether it worked. All the actual accept/dedupe/retry/tracking logic
+// lives in DownloadManager::track() now (it needs to persist state and
+// drive the downloads-list UI, not just this one profile-level signal);
+// this is just the wiring between the two.
+void installDownloadHandler(QWebEngineProfile *profile, DownloadManager *downloads) {
+  QObject::connect(profile, &QWebEngineProfile::downloadRequested, downloads,
+                    [downloads](QWebEngineDownloadRequest *download) { downloads->track(download); });
 }
 
 }  // namespace
 
-QWebEngineProfile *createSharedProfile(QObject *parent) {
+QWebEngineProfile *createSharedProfile(QObject *parent, DownloadManager *downloads) {
   const QString storage = webEngineStoragePath();
   QDir().mkpath(storage);
 
@@ -291,7 +199,7 @@ QWebEngineProfile *createSharedProfile(QObject *parent) {
 
   installScrollbarHidingScript(profile);
   installWebAuthnCapabilityShim(profile);
-  installDownloadHandler(profile);
+  installDownloadHandler(profile, downloads);
 
   return profile;
 }
