@@ -1,5 +1,7 @@
 # Shinto
 
+![Chrome (left) vs. Shinto (right) on the same page](docs/chrome-vs-shinto.png)
+
 *Chrome has too much chrome; Zen isn't zen enough.*
 
 *Shinto renders unto the window management gods what is theirs.*
