@@ -33,12 +33,16 @@ git clone https://github.com/ijt/shinto.git
 cd shinto
 cmake -S app -B app/build
 cmake --build app/build
+cd downloads-tui && cargo build --release && cd ..
 ./shinto install
 ```
 
-That will:
+The `cargo build` is for the downloads view (`shinto-downloads`, a separate
+Rust/Ratatui binary -- see [`downloads-tui/`](downloads-tui/)) opened by
+Ctrl+J or clicking the bottom progress bar; skip it and Shinto still works
+fine as a browser, that one view just won't open. `./shinto install` will:
 
-- symlink `~/.local/bin/shinto`
+- symlink `~/.local/bin/shinto` (and `~/.local/bin/shinto-downloads`, if built)
 - enable `shinto.service` so the daemon is warm after login
 - rebind `Super + Shift + Return` to Shinto and `Super + Shift + Y` to YouTube in Shinto
 - tag Shinto windows like other Chromium-family browsers
@@ -76,6 +80,11 @@ omarchy default browser shinto
 /usr/lib/systemd/user/shinto.service
 ```
 
+`shinto-downloads` isn't part of this -- it's a separate Cargo build (see
+[`downloads-tui/`](downloads-tui/)), not yet wired into `cmake --install`
+or the AUR `PKGBUILD`. `./shinto install` handles it for a from-source
+install (see above); packaging it properly is still open work.
+
 ## Keys
 
 Browser (inside a Shinto window):
@@ -86,6 +95,7 @@ Browser (inside a Shinto window):
 | `Ctrl + L` / `Ctrl + K` | Edit this window's address (whole address selected, so typing replaces it). Escape goes back. |
 | `Alt + Left` | Back (configurable, see [Configuration](#configuration)) |
 | `Ctrl + F` | Find in page. Enter/Shift+Enter or the ↓/↑ buttons step through matches, Escape closes it. |
+| `Ctrl + J` | Open the downloads view (`shinto-downloads`, a terminal UI) -- also opens by clicking the bottom progress bar shown while a download is active |
 | `Ctrl + W` / `Super + Q` | Close this page |
 
 Hyprland groups (these are the tabs):

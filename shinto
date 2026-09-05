@@ -9,6 +9,10 @@ set -euo pipefail
 SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 BIN="$SCRIPT_DIR/app/build/shinto-bin"
+# The downloads view (Ctrl+J / the bottom progress bar) is a separate Rust
+# binary (see downloads-tui/) -- BrowserWindow.cpp finds it on PATH by
+# bare name, so it needs its own symlink into ~/.local/bin, same as $BIN.
+DOWNLOADS_TUI_BIN="$SCRIPT_DIR/downloads-tui/target/release/shinto-downloads"
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/shinto"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -208,6 +212,19 @@ install_path() {
   ln -sfn "$SCRIPT_PATH" "$HOME/.local/bin/shinto"
 }
 
+install_downloads_tui() {
+  if [[ -x $DOWNLOADS_TUI_BIN ]]; then
+    ln -sfn "$DOWNLOADS_TUI_BIN" "$HOME/.local/bin/shinto-downloads"
+  else
+    # Not fatal -- downloads still work without this, there's just no
+    # Ctrl+J/bottom-bar view for them until Rust/cargo is available.
+    echo "shinto: $DOWNLOADS_TUI_BIN not built -- the downloads view (Ctrl+J," >&2
+    echo "  or clicking the bottom progress bar) won't work until you run:" >&2
+    echo "    cd $SCRIPT_DIR/downloads-tui && cargo build --release" >&2
+    echo "  then re-run: $SCRIPT_PATH install" >&2
+  fi
+}
+
 install_theme_hook() {
   if command -v omarchy >/dev/null; then
     omarchy hook install theme-set "$SCRIPT_DIR/theme-set-hook.sh" >/dev/null 2>&1 || true
@@ -217,6 +234,7 @@ install_theme_hook() {
 do_install() {
   require_bin
   install_path
+  install_downloads_tui
   install_desktop
   install_hypr
   install_systemd
@@ -230,6 +248,7 @@ do_uninstall() {
   systemctl --user disable --now shinto.service 2>/dev/null || true
   rm -f "$CONFIG_HOME/systemd/user/shinto.service"
   rm -f "$HOME/.local/bin/shinto"
+  rm -f "$HOME/.local/bin/shinto-downloads"
   rm -f "$HOME/.local/share/applications/shinto.desktop"
   rm -f "$CONFIG_HOME/hypr/shinto.lua"
   if [[ -f $CONFIG_HOME/hypr/hyprland.lua ]]; then
