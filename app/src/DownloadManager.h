@@ -20,6 +20,11 @@ class DownloadManager : public QObject {
   Q_OBJECT
 
  public:
+  // Persisted to SQLite as this declaration order's plain int (see
+  // persist()/open()) -- downloads-tui/ (a separate Rust binary reading
+  // the same downloads.sqlite directly, no shared header) mirrors these
+  // exact ordinals in its own enum. Reordering/inserting a variant here
+  // silently breaks that reader; append new states at the end only.
   enum class State { InProgress, Completed, Interrupted, Cancelled };
 
   struct DownloadRecord {
@@ -52,6 +57,15 @@ class DownloadManager : public QObject {
 
   // Newest-started first -- for the downloads list view.
   QVector<DownloadRecord> all() const;
+
+  // Re-reads every row from disk, replacing the in-memory cache -- for a
+  // process that didn't write these rows itself (see DownloadsTui.cpp,
+  // `shinto --downloads`: a separate short-lived process from the daemon
+  // that's actually downloading things, polling the same SQLite file the
+  // daemon is writing to). Never rewrites stale InProgress rows the way
+  // open() does -- that fixup is the daemon's own restart-recovery, not
+  // something a read-only viewer should do to another process's data.
+  void refreshFromDisk();
 
   bool hasActive() const;
 

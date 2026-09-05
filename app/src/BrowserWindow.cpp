@@ -1,6 +1,7 @@
 #include "BrowserWindow.h"
 
 #include <QKeyEvent>
+#include <QProcess>
 #include <QResizeEvent>
 #include <QShortcut>
 #include <QUrl>
@@ -13,8 +14,11 @@
 #include <QWebEngineProfile>
 #include <QWebEngineView>
 
+#include "DownloadBar.h"
+#include "DownloadManager.h"
 #include "FindBar.h"
 #include "OmniboxOverlay.h"
+#include "RevealFile.h"
 
 namespace shinto {
 
@@ -37,6 +41,7 @@ bool isShintoShortcut(const QKeyEvent *ke, const QKeySequence &backShortcut) {
     case Qt::Key_K:
     case Qt::Key_W:
     case Qt::Key_F:
+    case Qt::Key_J:
       return true;
     default:
       return false;
@@ -172,12 +177,21 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   findBar_ = new FindBar(container);
   findBar_->applyPalette(currentPalette_);
 
+  downloadBar_ = new DownloadBar(container);
+  downloadBar_->applyPalette(currentPalette_);
+  connect(downloadBar_, &DownloadBar::clicked, this, &BrowserWindow::onDownloadBarClicked);
+  connect(downloads_, &DownloadManager::downloadAdded, this, [this](int) { refreshDownloadBar(); });
+  connect(downloads_, &DownloadManager::downloadProgress, this,
+          [this](int, qint64, qint64) { refreshDownloadBar(); });
+  connect(downloads_, &DownloadManager::downloadStateChanged, this,
+          [this](int, DownloadManager::State) { refreshDownloadBar(); });
+
   auto *layout = new QVBoxLayout(container);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(webView_);
-  // overlay_/findBar_ are deliberately not added to this layout --
-  // BrowserWindow positions them directly on top of webView_ by hand
-  // (relayout()/relayoutFindBar()).
+  // overlay_/findBar_/downloadBar_ are deliberately not added to this
+  // layout -- BrowserWindow positions them directly on top of webView_ by
+  // hand (relayout()/relayoutFindBar()/relayoutDownloadBar()).
 
   connect(overlay_, &OmniboxOverlay::navigateRequested, this, &BrowserWindow::onOverlayNavigate);
   connect(overlay_, &OmniboxOverlay::cancelled, this, &BrowserWindow::onOverlayCancelled);
@@ -285,6 +299,11 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), [this] { close(); });
   addShortcut(config_.backShortcut, &BrowserWindow::onBackShortcut);
   addShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), &BrowserWindow::onFindShortcut);
+  // The conventional browser "show downloads" binding (Chrome/Firefox),
+  // unused in Shinto otherwise -- independent of downloadBar_'s click
+  // handler so the downloads list stays reachable even when nothing is
+  // currently active and the bar isn't showing.
+  addShortcut(QKeySequence(Qt::CTRL | Qt::Key_J), &BrowserWindow::launchDownloadsTui);
 
   if (url.isEmpty()) {
     enterEmpty(showEmptyGate);
@@ -293,6 +312,11 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
     webView_->setUrl(QUrl(url));
     overlay_->hideOverlay();
   }
+
+  // Reflects a download already in progress (started before this window
+  // existed) immediately, the same way overlay_/findBar_ above already
+  // apply currentPalette_ without waiting for the next broadcast.
+  refreshDownloadBar();
 }
 
 BrowserWindow::~BrowserWindow() { instances_.removeOne(this); }
@@ -301,6 +325,7 @@ void BrowserWindow::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
   relayout();
   relayoutFindBar();
+  relayoutDownloadBar();
 }
 
 void BrowserWindow::relayout() {
@@ -317,6 +342,40 @@ void BrowserWindow::relayoutFindBar() {
   const QSize hint = findBar_->sizeHint();
   const int w = qMin(hint.width(), qMax(0, centralWidget()->width() - 2 * kMargin));
   findBar_->setGeometry(centralWidget()->width() - w - kMargin, kMargin, w, hint.height());
+}
+
+void BrowserWindow::relayoutDownloadBar() {
+  if (!downloadBar_->isVisible()) return;
+  // Flush with the very bottom edge, full width -- unlike findBar_ (a
+  // small floating box), this bar's whole point is a strip you can't miss.
+  downloadBar_->setGeometry(0, centralWidget()->height() - downloadBar_->height(),
+                             centralWidget()->width(), downloadBar_->height());
+}
+
+void BrowserWindow::refreshDownloadBar() {
+  if (downloads_->hasActive()) {
+    downloadBar_->showFor(downloads_->latestActive());
+    relayoutDownloadBar();
+  } else {
+    downloadBar_->hideBar();
+  }
+}
+
+void BrowserWindow::onDownloadBarClicked() {
+  const auto record = downloads_->latestActive();
+  if (record.id != 0) {
+    revealInFileManager(record.path);
+  } else {
+    // Shouldn't normally happen (the bar only shows while hasActive() is
+    // true), but a click landing just as it disappeared is a real race --
+    // fall back to something useful instead of a silent no-op.
+    launchDownloadsTui();
+  }
+}
+
+void BrowserWindow::launchDownloadsTui() {
+  QProcess::startDetached(QStringLiteral("xdg-terminal-exec"),
+                           {QStringLiteral("--"), QStringLiteral("shinto-downloads")});
 }
 
 void BrowserWindow::enterEmpty(bool showGate) {

@@ -23,6 +23,7 @@ class QResizeEvent;
 
 namespace shinto {
 
+class DownloadBar;
 class DownloadManager;
 class FindBar;
 class OmniboxOverlay;
@@ -59,6 +60,11 @@ class BrowserWindow : public QMainWindow {
   // Omarchy theme-set-hook path, delivered over the singleton socket).
   static void applyPaletteToAll(const Palette &palette);
 
+  // The last-broadcast palette, cached so a freshly-spawned window (or
+  // DownloadsWindow, opened lazily and separately from this class) can
+  // apply it immediately without waiting for the next broadcast.
+  static const Palette &currentPalette() { return currentPalette_; }
+
  ~BrowserWindow() override;
 
  protected:
@@ -82,6 +88,19 @@ class BrowserWindow : public QMainWindow {
 
   void relayout();
   void relayoutFindBar();
+  void relayoutDownloadBar();
+  // Shows/hides downloadBar_ to match downloads_->hasActive() (and its
+  // content to downloads_->latestActive()) -- connected to all three
+  // DownloadManager signals, so it doesn't matter which one fired.
+  void refreshDownloadBar();
+  // downloadBar_'s click target: reveals the bar's current download in
+  // the file manager (see RevealFile.h) rather than the full list --
+  // Ctrl+J (launchDownloadsTui()) is the dedicated way to reach that.
+  void onDownloadBarClicked();
+  // Runs `shinto-downloads` (a standalone Rust/Ratatui TUI, see
+  // downloads-tui/) in a fresh terminal -- it reads DownloadManager's own
+  // downloads.sqlite directly, no IPC with this process needed.
+  void launchDownloadsTui();
   void enterEmpty(bool showGate);
   void showGateOverPage();
   void onOverlayNavigate(const QString &url, const QString &typedQuery);
@@ -105,6 +124,7 @@ class BrowserWindow : public QMainWindow {
   WebView *webView_;
   OmniboxOverlay *overlay_;
   FindBar *findBar_;
+  DownloadBar *downloadBar_;
   State state_ = State::Empty;
   // Recording (both `visited` and `typed`) is deferred to loadFinished(true)
   // -- see the constructor -- rather than done eagerly on request, so a

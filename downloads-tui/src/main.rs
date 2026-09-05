@@ -1,0 +1,303 @@
+// Shinto's downloads view: a standalone terminal UI, launched by
+// BrowserWindow::launchDownloadsTui() (see app/src/BrowserWindow.cpp) in a
+// fresh terminal via `xdg-terminal-exec -- shinto-downloads`. Reads
+// DownloadManager's already-persisted downloads.sqlite directly -- no IPC
+// with the running Shinto daemon at all, just a shared SQLite file.
+
+use std::env;
+use std::path::PathBuf;
+use std::process::Command;
+use std::time::{Duration, Instant};
+
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+use ratatui::Frame;
+
+mod db;
+mod theme;
+
+use db::{Download, State};
+use theme::Palette;
+
+fn main() {
+    let mut terminal = ratatui::init();
+    let result = run(&mut terminal);
+    ratatui::restore();
+    if let Err(e) = result {
+        eprintln!("shinto-downloads: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// Focus determines which widget Enter/Escape/arrow keys act on.
+enum Focus {
+    List,
+    ActionPopup { target: usize, selected: usize },
+}
+
+fn run(terminal: &mut ratatui::DefaultTerminal) -> Result<(), Box<dyn std::error::Error>> {
+    let palette = theme::load_palette();
+    let db_path = db_path();
+
+    let mut downloads = db::load_all(&db_path).unwrap_or_default();
+    let mut list_state = ListState::default();
+    if !downloads.is_empty() {
+        list_state.select(Some(0));
+    }
+    let mut focus = Focus::List;
+    let mut last_poll = Instant::now();
+
+    loop {
+        terminal.draw(|frame| draw(frame, &downloads, &mut list_state, &focus, &palette))?;
+
+        // Re-read downloads.sqlite roughly every 500ms regardless of key
+        // input -- the daemon is a separate process actively writing to
+        // this file the whole time this view is open.
+        if last_poll.elapsed() >= Duration::from_millis(500) {
+            if let Ok(fresh) = db::load_all(&db_path) {
+                downloads = fresh;
+                if let Some(selected) = list_state.selected() {
+                    if selected >= downloads.len() && !downloads.is_empty() {
+                        list_state.select(Some(downloads.len() - 1));
+                    }
+                }
+            }
+            last_poll = Instant::now();
+        }
+
+        if event::poll(Duration::from_millis(250)).unwrap_or(false) {
+            if let Event::Key(key) = event::read()? {
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+                match &mut focus {
+                    Focus::List => match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                        KeyCode::Down | KeyCode::Char('j') => select_next(&mut list_state, downloads.len()),
+                        KeyCode::Up | KeyCode::Char('k') => select_prev(&mut list_state, downloads.len()),
+                        KeyCode::Enter => {
+                            if let Some(target) = list_state.selected() {
+                                if target < downloads.len() {
+                                    focus = Focus::ActionPopup { target, selected: 0 };
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    Focus::ActionPopup { target, selected } => match key.code {
+                        KeyCode::Esc => focus = Focus::List,
+                        KeyCode::Down | KeyCode::Char('j') => *selected = (*selected + 1) % 3,
+                        KeyCode::Up | KeyCode::Char('k') => *selected = (*selected + 2) % 3,
+                        KeyCode::Enter => {
+                            if let Some(d) = downloads.get(*target) {
+                                match *selected {
+                                    0 => open_file(&d.path),
+                                    1 => open_folder(&d.path),
+                                    _ => {}
+                                }
+                            }
+                            focus = Focus::List;
+                        }
+                        _ => {}
+                    },
+                }
+            }
+        }
+    }
+}
+
+fn select_next(state: &mut ListState, len: usize) {
+    if len == 0 {
+        return;
+    }
+    let next = state.selected().map(|i| (i + 1).min(len - 1)).unwrap_or(0);
+    state.select(Some(next));
+}
+
+fn select_prev(state: &mut ListState, len: usize) {
+    if len == 0 {
+        return;
+    }
+    let prev = state.selected().map(|i| i.saturating_sub(1)).unwrap_or(0);
+    state.select(Some(prev));
+}
+
+fn open_file(path: &str) {
+    let _ = Command::new("xdg-open").arg(path).spawn();
+}
+
+// org.freedesktop.FileManager1.ShowItems opens the folder with `path`
+// highlighted (most file managers implement it); falls back to a plain
+// (unselected) folder-open via xdg-open if nothing answers -- same
+// approach and same reasoning as app/src/RevealFile.cpp on the Qt side.
+fn open_folder(path: &str) {
+    let uri = format!("file://{path}");
+    let status = Command::new("dbus-send")
+        .args([
+            "--session",
+            "--print-reply",
+            "--dest=org.freedesktop.FileManager1",
+            "/org/freedesktop/FileManager1",
+            "org.freedesktop.FileManager1.ShowItems",
+            &format!("array:string:{uri}"),
+            "string:",
+        ])
+        .status();
+    let ok = matches!(status, Ok(s) if s.success());
+    if !ok {
+        let dir = PathBuf::from(path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let _ = Command::new("xdg-open").arg(dir).spawn();
+    }
+}
+
+// $XDG_DATA_HOME/shinto/downloads.sqlite, falling back to
+// $HOME/.local/share/shinto/downloads.sqlite -- mirrors
+// shinto::dataHome()/downloadsDbPath() in app/src/Shinto.h exactly.
+fn db_path() -> PathBuf {
+    let base = env::var("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(home).join(".local/share")
+        });
+    base.join("shinto").join("downloads.sqlite")
+}
+
+fn status_glyph_and_color(state: State, palette: &Palette) -> (&'static str, Color) {
+    match state {
+        State::InProgress => ("\u{2193}", palette.accent), // ↓
+        State::Completed => ("\u{2713}", Color::Green),    // ✓
+        State::Interrupted => ("\u{2717}", Color::Red),    // ✗
+        State::Cancelled => ("-", palette.muted),
+    }
+}
+
+fn state_label(state: State) -> &'static str {
+    match state {
+        State::InProgress => "In progress",
+        State::Completed => "Completed",
+        State::Interrupted => "Failed",
+        State::Cancelled => "Cancelled",
+    }
+}
+
+// Ratatui's Gauge/LineGauge widgets want their own Rect, not an inline
+// span sized to fit inside a list row -- a hand-built block-character bar
+// is the right tool for a compact per-row meter (same technique used for
+// the btop-style aesthetic elsewhere: partial blocks for smooth
+// sub-character resolution, not just full/empty blocks).
+fn bar(pct: f64, width: usize) -> String {
+    const FULL: char = '\u{2588}'; // █
+    let filled = ((pct / 100.0) * width as f64).round() as usize;
+    let filled = filled.min(width);
+    let mut s = String::with_capacity(width);
+    for _ in 0..filled {
+        s.push(FULL);
+    }
+    for _ in filled..width {
+        s.push('\u{2591}'); // ░
+    }
+    s
+}
+
+fn row_line(index: usize, d: &Download, palette: &Palette) -> ListItem<'static> {
+    let (glyph, color) = status_glyph_and_color(d.state, palette);
+    let mut spans = vec![
+        Span::styled(format!("{glyph} "), Style::default().fg(color)),
+        Span::raw(d.filename.clone()),
+    ];
+    if d.state == State::InProgress {
+        let pct = if d.total_bytes > 0 {
+            (d.received_bytes as f64 / d.total_bytes as f64) * 100.0
+        } else {
+            0.0
+        };
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(bar(pct, 20), Style::default().fg(palette.accent)));
+        spans.push(Span::raw(format!(" {:>3}%", pct.round() as i32)));
+    } else {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(state_label(d.state), Style::default().fg(color)));
+    }
+    let _ = index;
+    ListItem::new(Line::from(spans))
+}
+
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(height),
+            Constraint::Fill(1),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(width),
+            Constraint::Fill(1),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+fn draw(frame: &mut Frame, downloads: &[Download], list_state: &mut ListState, focus: &Focus, palette: &Palette) {
+    let area = frame.area();
+    let block = Block::default()
+        .title(" \u{21e9} Shinto Downloads ") // ⇩
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(palette.accent))
+        .style(Style::default().bg(palette.bg).fg(palette.fg));
+
+    if downloads.is_empty() {
+        let msg = Paragraph::new("No downloads yet.")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(palette.muted))
+            .block(block);
+        frame.render_widget(msg, area);
+    } else {
+        let items: Vec<ListItem> = downloads
+            .iter()
+            .enumerate()
+            .map(|(i, d)| row_line(i, d, palette))
+            .collect();
+        let list = List::new(items)
+            .block(block)
+            .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        frame.render_stateful_widget(list, area, list_state);
+    }
+
+    if let Focus::ActionPopup { selected, .. } = focus {
+        let popup_area = centered_rect(34, 7, area);
+        frame.render_widget(Clear, popup_area);
+        let labels = ["Open file", "Open containing folder", "Cancel"];
+        let items: Vec<ListItem> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, label)| {
+                let style = if i == *selected {
+                    Style::default().add_modifier(Modifier::REVERSED)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(Line::from(Span::styled(*label, style)))
+            })
+            .collect();
+        let popup = List::new(items).block(
+            Block::default()
+                .title(" Action ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(palette.accent))
+                .style(Style::default().bg(palette.bg).fg(palette.fg)),
+        );
+        frame.render_widget(popup, popup_area);
+    }
+}

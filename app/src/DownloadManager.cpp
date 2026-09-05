@@ -47,6 +47,29 @@ bool isRetryableInterrupt(QWebEngineDownloadRequest::DownloadInterruptReason rea
   }
 }
 
+DownloadManager::DownloadRecord rowFromQuery(const QSqlQuery &q) {
+  DownloadManager::DownloadRecord r;
+  r.id = q.value(0).toInt();
+  r.filename = q.value(1).toString();
+  r.path = q.value(2).toString();
+  r.url = q.value(3).toString();
+  r.totalBytes = q.value(4).toLongLong();
+  r.receivedBytes = q.value(5).toLongLong();
+  r.state = static_cast<DownloadManager::State>(q.value(6).toInt());
+  r.interruptReason = q.value(7).toString();
+  r.startedAt = q.value(8).toLongLong();
+  r.finishedAt = q.value(9).toLongLong();
+  return r;
+}
+
+// QStringLiteral needs an actual literal token at its call site (it does a
+// compile-time UTF-16 conversion trick), not a variable -- QLatin1String
+// converts to QString implicitly and has no such restriction, so this can
+// still be shared between open() and refreshFromDisk() as one constant.
+const QLatin1String kSelectAllSql(
+    "SELECT id, filename, path, url, total_bytes, received_bytes, state,"
+    " interrupt_reason, started_at, finished_at FROM downloads ORDER BY started_at DESC");
+
 }  // namespace
 
 DownloadManager::DownloadManager(QObject *parent) : QObject(parent) {}
@@ -65,21 +88,9 @@ bool DownloadManager::open() {
       " total_bytes INTEGER, received_bytes INTEGER, state INTEGER,"
       " interrupt_reason TEXT, started_at INTEGER, finished_at INTEGER)"));
 
-  q.exec(QStringLiteral(
-      "SELECT id, filename, path, url, total_bytes, received_bytes, state,"
-      " interrupt_reason, started_at, finished_at FROM downloads ORDER BY started_at DESC"));
+  q.exec(kSelectAllSql);
   while (q.next()) {
-    DownloadRecord r;
-    r.id = q.value(0).toInt();
-    r.filename = q.value(1).toString();
-    r.path = q.value(2).toString();
-    r.url = q.value(3).toString();
-    r.totalBytes = q.value(4).toLongLong();
-    r.receivedBytes = q.value(5).toLongLong();
-    r.state = static_cast<State>(q.value(6).toInt());
-    r.interruptReason = q.value(7).toString();
-    r.startedAt = q.value(8).toLongLong();
-    r.finishedAt = q.value(9).toLongLong();
+    DownloadRecord r = rowFromQuery(q);
     // A row still InProgress from a previous daemon run can never actually
     // resume -- its real QWebEngineDownloadRequest died along with that
     // process. Fixed up in-memory here; the one bulk UPDATE below persists
@@ -105,6 +116,16 @@ bool DownloadManager::open() {
     qWarning() << "shinto: could not mark stale downloads interrupted:" << fix.lastError().text();
   }
   return true;
+}
+
+void DownloadManager::refreshFromDisk() {
+  QSqlQuery q(db_);
+  q.exec(kSelectAllSql);
+  QVector<DownloadRecord> fresh;
+  while (q.next()) {
+    fresh.push_back(rowFromQuery(q));
+  }
+  records_ = fresh;
 }
 
 void DownloadManager::persist(const DownloadRecord &record) {
