@@ -208,11 +208,19 @@ void DownloadManager::track(QWebEngineDownloadRequest *download) {
 
   notify(QStringLiteral("Download started"), candidate);
 
-  // Throttled to ~4/sec -- receivedBytesChanged fires far more often than
-  // any UI needs to redraw.
+  // Emitted signal throttled to ~4/sec -- receivedBytesChanged fires far
+  // more often than any in-process UI needs to redraw. The SQLite write is
+  // throttled separately and much more coarsely (~1/sec): downloads-tui/
+  // (a whole separate process, unlike an in-process signal listener) has
+  // no way to see progress *except* through this file, so it can't be
+  // skipped the way the original "in-memory only" version did here --
+  // confirmed concretely: the TUI's bar sat frozen at its initial 0%
+  // until the download finished, since nothing ever wrote a byte count to
+  // disk before that.
   auto lastEmitMs = std::make_shared<qint64>(0);
+  auto lastPersistMs = std::make_shared<qint64>(0);
   connect(download, &QWebEngineDownloadRequest::receivedBytesChanged, this,
-          [this, download, id, lastEmitMs]() {
+          [this, download, id, lastEmitMs, lastPersistMs]() {
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
             if (now - *lastEmitMs < 250) return;
             *lastEmitMs = now;
@@ -220,15 +228,16 @@ void DownloadManager::track(QWebEngineDownloadRequest *download) {
             if (r.id == 0) return;  // already finished and possibly re-tracked elsewhere
             r.receivedBytes = download->receivedBytes();
             r.totalBytes = download->totalBytes();
-            // Not persist(): a live byte count doesn't need synchronous
-            // disk I/O 4 times a second -- only update the in-memory copy
-            // UI reads from. Terminal states below still persist().
             for (auto &cached : records_) {
               if (cached.id == id) {
                 cached.receivedBytes = r.receivedBytes;
                 cached.totalBytes = r.totalBytes;
                 break;
               }
+            }
+            if (now - *lastPersistMs >= 1000) {
+              *lastPersistMs = now;
+              persist(r);
             }
             emit downloadProgress(id, r.receivedBytes, r.totalBytes);
           });

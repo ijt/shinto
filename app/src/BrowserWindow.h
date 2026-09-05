@@ -93,10 +93,6 @@ class BrowserWindow : public QMainWindow {
   // content to downloads_->latestActive()) -- connected to all three
   // DownloadManager signals, so it doesn't matter which one fired.
   void refreshDownloadBar();
-  // downloadBar_'s click target: reveals the bar's current download in
-  // the file manager (see RevealFile.h) rather than the full list --
-  // Ctrl+J (launchDownloadsTui()) is the dedicated way to reach that.
-  void onDownloadBarClicked();
   // Runs `shinto-downloads` (a standalone Rust/Ratatui TUI, see
   // downloads-tui/) in a fresh terminal -- it reads DownloadManager's own
   // downloads.sqlite directly, no IPC with this process needed.

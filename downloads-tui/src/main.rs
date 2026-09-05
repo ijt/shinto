@@ -278,7 +278,7 @@ fn draw(frame: &mut Frame, downloads: &[Download], list_state: &mut ListState, f
     if let Focus::ActionPopup { selected, .. } = focus {
         let popup_area = centered_rect(34, 7, area);
         frame.render_widget(Clear, popup_area);
-        let labels = ["Open file", "Open containing folder", "Cancel"];
+        let labels = ["\u{1F4C4} Open file", "\u{1F4C1} Open containing folder", "\u{2715} Cancel"]; // 📄 📁 ✕
         let items: Vec<ListItem> = labels
             .iter()
             .enumerate()

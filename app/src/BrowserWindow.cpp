@@ -18,7 +18,6 @@
 #include "DownloadManager.h"
 #include "FindBar.h"
 #include "OmniboxOverlay.h"
-#include "RevealFile.h"
 
 namespace shinto {
 
@@ -179,7 +178,7 @@ BrowserWindow::BrowserWindow(QWebEngineProfile *profile, HistoryStore *history,
 
   downloadBar_ = new DownloadBar(container);
   downloadBar_->applyPalette(currentPalette_);
-  connect(downloadBar_, &DownloadBar::clicked, this, &BrowserWindow::onDownloadBarClicked);
+  connect(downloadBar_, &DownloadBar::clicked, this, &BrowserWindow::launchDownloadsTui);
   connect(downloads_, &DownloadManager::downloadAdded, this, [this](int) { refreshDownloadBar(); });
   connect(downloads_, &DownloadManager::downloadProgress, this,
           [this](int, qint64, qint64) { refreshDownloadBar(); });
@@ -358,18 +357,6 @@ void BrowserWindow::refreshDownloadBar() {
     relayoutDownloadBar();
   } else {
     downloadBar_->hideBar();
-  }
-}
-
-void BrowserWindow::onDownloadBarClicked() {
-  const auto record = downloads_->latestActive();
-  if (record.id != 0) {
-    revealInFileManager(record.path);
-  } else {
-    // Shouldn't normally happen (the bar only shows while hasActive() is
-    // true), but a click landing just as it disappeared is a real race --
-    // fall back to something useful instead of a silent no-op.
-    launchDownloadsTui();
   }
 }
 
