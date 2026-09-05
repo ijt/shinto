@@ -1,6 +1,7 @@
 # Shinto
 
 ![Chrome (left) vs. Shinto (right) on the same page](docs/chrome-vs-shinto.png)
+*Chrome on the left, Shinto on the right.*
 
 *Chrome has too much chrome; Zen isn't zen enough.*
 
